@@ -1,33 +1,38 @@
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+};
 
-fn main() {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     // Create the TCP listener, bound to the
     // standard Redis port.
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:6379").await?;
 
-    // Process each incoming connection.
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                // The connection is valid, handle it.
-                handle_connection(&mut stream);
+    loop {
+        // Process each incoming connection.
+        match listener.accept().await {
+            // The connection is valid, handle it.
+            Ok((stream, _)) => {
+                // Spawn a task to take care of this connection.
+                tokio::spawn(handle_connection(stream));
             }
             Err(e) => {
-                println!("error: {}", e);
+                println!("Error: {}", e);
+                continue;
             }
         }
     }
 }
 
 // The main entry point for valid TCP connections.
-fn handle_connection(stream: &mut TcpStream) {
+async fn handle_connection(mut stream: TcpStream) {
     // Create a buffer to host incoming data.
     let mut buffer = [0; 512];
 
     loop {
         // Read from the stream into the buffer.
-        match stream.read(&mut buffer) {
+        match stream.read(&mut buffer).await {
             // If the stream returned some data,
             // process the request.
             Ok(size) if size != 0 => {
@@ -35,10 +40,9 @@ fn handle_connection(stream: &mut TcpStream) {
                 let response = "+PONG\r\n";
 
                 // Write the response to the stream.
-                stream.write(response.as_bytes()).unwrap();
-
-                // Make sure the stream is flushed.
-                stream.flush().unwrap();
+                if let Err(e) = stream.write_all(response.as_bytes()).await {
+                    eprintln!("Error writing to socket: {}", e);
+                }
             }
             // If the stream returned no data
             // the connection has been closed.
