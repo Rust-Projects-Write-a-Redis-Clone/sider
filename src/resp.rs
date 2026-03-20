@@ -1,9 +1,15 @@
-use crate::resp_result::RESPResult;
+use crate::resp_result::{RESPError, RESPResult};
 
 // Extracts bytes from the buffer until a `\r\n` is reached.
 fn binary_extract_line(buffer: &[u8], index: &mut usize) -> RESPResult<Vec<u8>> {
     // The extracted bytes will be stored in this vector.
     let mut output = Vec::new();
+
+    // Exit with an error if we are trying to read
+    // after the end of the buffer.
+    if *index >= buffer.len() {
+        return Err(RESPError::OutOfBounds(*index));
+    }
 
     // Since the terminator \r\n is made of two characters,
     // we keep track of the previous element we read.
@@ -76,5 +82,21 @@ mod tests {
 
         assert_eq!(output, "ECHO".as_bytes());
         assert_eq!(index, 6);
+    }
+
+    #[test]
+    // Test that the function binary_extract_line
+    // returns the correct error when we try to
+    // read an empty buffer.
+    fn test_binary_extract_line_empty_buffer() {
+        let buffer = "".as_bytes();
+        let mut index: usize = 0;
+
+        match binary_extract_line(buffer, &mut index) {
+            Err(RESPError::OutOfBounds(index)) => {
+                assert_eq!(index, 0);
+            }
+            _ => panic!(),
+        }
     }
 }
