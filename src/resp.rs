@@ -74,6 +74,20 @@ pub fn binary_extract_line_as_string(buffer: &[u8], index: &mut usize) -> RESPRe
     Ok(String::from_utf8(line)?)
 }
 
+// Checks that the first character of a RESP buffer is the given one and removes it.
+pub fn resp_remove_type(value: char, buffer: &[u8], index: &mut usize) -> RESPResult<()> {
+    // Check if the character at the given position
+    // of the buffer corresponds to the provided value.
+    if buffer[*index] != value as u8 {
+        return Err(RESPError::WrongType);
+    }
+
+    // Increment the index to skip the type character.
+    *index += 1;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,5 +228,33 @@ mod tests {
         let error = binary_extract_line_as_string(&buffer, &mut index).unwrap_err();
 
         assert_eq!(error, RESPError::FromUtf8);
+    }
+
+    #[test]
+    // Test that the function resp_remove_type
+    // checks and returns the given type from a buffer
+    // and updates the index.
+    fn test_resp_remove_type() {
+        let buffer = "+OK\r\n".as_bytes();
+        let mut index: usize = 0;
+
+        resp_remove_type('+', buffer, &mut index).unwrap();
+
+        assert_eq!(index, 1);
+    }
+
+    #[test]
+    // Test that the function resp_remove_type
+    // returns the correct error when we try to
+    // read a given type from a buffer that
+    // contains a different type.
+    fn test_resp_remove_type_error() {
+        let buffer = "*OK\r\n".as_bytes();
+        let mut index: usize = 0;
+
+        let error = resp_remove_type('+', buffer, &mut index).unwrap_err();
+
+        assert_eq!(index, 0);
+        assert_eq!(error, RESPError::WrongType);
     }
 }
