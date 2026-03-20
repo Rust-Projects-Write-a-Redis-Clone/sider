@@ -17,6 +17,9 @@ fn binary_extract_line(buffer: &[u8], index: &mut usize) -> RESPResult<Vec<u8>> 
     // the buffer.
     let mut previous_elem: u8 = buffer[*index].clone();
 
+    // A flag to signal that we found the characters \r\n.
+    let mut separator_found: bool = false;
+
     // We don't want to change the index until
     // we are sure the function succeeds.
     // This is a temporary index to keep track
@@ -33,11 +36,21 @@ fn binary_extract_line(buffer: &[u8], index: &mut usize) -> RESPResult<Vec<u8>> 
 
         // Check if we just passed the terminator \r\n.
         if elem == b'\n' && previous_elem == b'\r' {
+            // Toggle the flag to signal that all is good.
+            separator_found = true;
+
             break;
         }
 
         // Store the current element for the next loop.
         previous_elem = elem.clone();
+    }
+
+    // If the previous element is not \n
+    // we are out of bounds
+    if !separator_found {
+        *index = final_index;
+        return Err(RESPError::OutOfBounds(*index));
     }
 
     // Copy the bytes from the buffer to the output vector.
@@ -95,6 +108,23 @@ mod tests {
         match binary_extract_line(buffer, &mut index) {
             Err(RESPError::OutOfBounds(index)) => {
                 assert_eq!(index, 0);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function binary_extract_line
+    // returns the correct error when we try to
+    // read a buffer that doesn't contain the
+    // terminator \r\n.
+    fn test_binary_extract_line_no_separator() {
+        let buffer = "OK".as_bytes();
+        let mut index: usize = 0;
+
+        match binary_extract_line(buffer, &mut index) {
+            Err(RESPError::OutOfBounds(index)) => {
+                assert_eq!(index, 2);
             }
             _ => panic!(),
         }
