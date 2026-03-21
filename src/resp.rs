@@ -116,6 +116,33 @@ fn parse_simple_string(buffer: &[u8], index: &mut usize) -> RESPResult<RESP> {
     Ok(RESP::SimpleString(line))
 }
 
+// Select the correct parsing function according to the data type found
+// in the buffer at the given index.
+fn parser_router(
+    buffer: &[u8],
+    index: &mut usize,
+) -> Option<fn(&[u8], &mut usize) -> RESPResult<RESP>> {
+    // Get the character at the current index
+    // and associate it with a parsing function.
+    match buffer[*index] {
+        b'+' => Some(parse_simple_string),
+        _ => None,
+    }
+}
+
+// Parse the bytes of the buffer at the given index and return a RESP data type.
+pub fn bytes_to_resp(buffer: &[u8], index: &mut usize) -> RESPResult<RESP> {
+    // Call the selected parsing function and
+    // manage the result.
+    match parser_router(buffer, index) {
+        Some(parse_func) => {
+            let result: RESP = parse_func(buffer, index)?;
+            Ok(result)
+        }
+        None => Err(RESPError::Unknown),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +326,34 @@ mod tests {
 
         assert_eq!(output, RESP::SimpleString(String::from("OK")));
         assert_eq!(index, 5);
+    }
+
+    #[test]
+    // Test the parsing process end-to-end, checking
+    // that the function bytes_to_resp can parse
+    // a buffer with a RESP simple string.
+    fn test_bytes_to_resp_simple_string() {
+        let buffer = "+OK\r\n".as_bytes();
+        let mut index: usize = 0;
+
+        let output = bytes_to_resp(buffer, &mut index).unwrap();
+
+        assert_eq!(output, RESP::SimpleString(String::from("OK")));
+        assert_eq!(index, 5);
+    }
+
+    #[test]
+    // Test the parsing process end-to-end, checking
+    // that the function bytes_to_resp can returns
+    // the correct error when used to parse a
+    // buffer with an unknown data type.
+    fn test_bytes_to_resp_unknown() {
+        let buffer = "?OK\r\n".as_bytes();
+        let mut index: usize = 0;
+
+        let error = bytes_to_resp(buffer, &mut index).unwrap_err();
+
+        assert_eq!(error, RESPError::Unknown);
+        assert_eq!(index, 0);
     }
 }
