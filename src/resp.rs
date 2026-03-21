@@ -1,5 +1,10 @@
 use crate::resp_result::{RESPError, RESPResult};
 
+#[derive(Debug, PartialEq)]
+pub enum RESP {
+    SimpleString(String),
+}
+
 // Extracts bytes from the buffer until a `\r\n` is reached.
 fn binary_extract_line(buffer: &[u8], index: &mut usize) -> RESPResult<Vec<u8>> {
     // The extracted bytes will be stored in this vector.
@@ -86,6 +91,18 @@ pub fn resp_remove_type(value: char, buffer: &[u8], index: &mut usize) -> RESPRe
     *index += 1;
 
     Ok(())
+}
+
+// Parse a simple string in the form `+VALUE\r\n`.
+fn parse_simple_string(buffer: &[u8], index: &mut usize) -> RESPResult<RESP> {
+    // Remove the type for a simple string.
+    resp_remove_type('+', buffer, index)?;
+
+    // Read all possible bytes and convert them into UTF-8.
+    let line: String = binary_extract_line_as_string(buffer, index)?;
+
+    // Add the String to a custom RESP type.
+    Ok(RESP::SimpleString(line))
 }
 
 #[cfg(test)]
@@ -256,5 +273,20 @@ mod tests {
 
         assert_eq!(index, 0);
         assert_eq!(error, RESPError::WrongType);
+    }
+
+    #[test]
+    // Test that the function parse_simple_string
+    // returns the correct RESP variant when
+    // we read a buffer that contains a
+    // RESP simple string.
+    fn test_parse_simple_string() {
+        let buffer = "+OK\r\n".as_bytes();
+        let mut index: usize = 0;
+
+        let output = parse_simple_string(buffer, &mut index).unwrap();
+
+        assert_eq!(output, RESP::SimpleString(String::from("OK")));
+        assert_eq!(index, 5);
     }
 }
