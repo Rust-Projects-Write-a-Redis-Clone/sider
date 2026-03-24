@@ -1,13 +1,14 @@
+use crate::request::Request;
 use crate::storage::Storage;
 use crate::storage_result::{StorageError, StorageResult};
 use crate::RESP;
 use std::sync::{Arc, Mutex};
 
 // Process an incoming request and return a result.
-pub fn process_request(request: RESP, storage: Arc<Mutex<Storage>>) -> StorageResult<RESP> {
+pub fn process_request(request: Request, storage: Arc<Mutex<Storage>>) -> StorageResult<RESP> {
     // Check if the request is expressed using
     // a RESP array and extract the elements.
-    let elements = match request {
+    let elements = match request.value {
         RESP::Array(v) => v,
         _ => {
             return Err(StorageError::IncorrectRequest);
@@ -42,13 +43,20 @@ pub fn process_request(request: RESP, storage: Arc<Mutex<Storage>>) -> StorageRe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server_result::ServerMessage;
+    use tokio::sync::mpsc;
 
     #[test]
     // Test that the function process_request
     // processes a PING request and that it
     // responds with a PONG.
     fn test_process_request_ping() {
-        let request = RESP::Array(vec![RESP::BulkString(String::from("PING"))]);
+        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: RESP::Array(vec![RESP::BulkString(String::from("PING"))]),
+            sender: connection_sender,
+        };
         let storage = Arc::new(Mutex::new(Storage::new()));
 
         let output = process_request(request, storage).unwrap();
@@ -62,7 +70,12 @@ mod tests {
     // given a request that doesn't contain
     // a RESP array.
     fn test_process_request_not_array() {
-        let request = RESP::BulkString(String::from("PING"));
+        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: RESP::BulkString(String::from("PING")),
+            sender: connection_sender,
+        };
         let storage = Arc::new(Mutex::new(Storage::new()));
 
         let error = process_request(request, storage).unwrap_err();
@@ -77,7 +90,13 @@ mod tests {
     // but the content of the array is not
     // a bulk string.
     fn test_process_request_not_bulkstrings() {
-        let request = RESP::Array(vec![RESP::SimpleString(String::from("PING"))]);
+        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: RESP::Array(vec![RESP::SimpleString(String::from("PING"))]),
+            sender: connection_sender,
+        };
+
         let storage = Arc::new(Mutex::new(Storage::new()));
 
         let error = process_request(request, storage).unwrap_err();
@@ -90,10 +109,16 @@ mod tests {
     // processes an ECHO request and that it
     // responds with a copy of the input.
     fn test_process_request_echo() {
-        let request = RESP::Array(vec![
-            RESP::BulkString(String::from("ECHO")),
-            RESP::BulkString(String::from("42")),
-        ]);
+        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: RESP::Array(vec![
+                RESP::BulkString(String::from("ECHO")),
+                RESP::BulkString(String::from("42")),
+            ]),
+            sender: connection_sender,
+        };
+
         let storage = Arc::new(Mutex::new(Storage::new()));
 
         let output = process_request(request, storage).unwrap();
