@@ -1,6 +1,6 @@
 use crate::connection::ConnectionMessage;
 use crate::request::Request;
-use crate::server_result::{ServerMessage, ServerValue};
+use crate::server_result::{ServerError, ServerValue};
 use crate::storage::Storage;
 use crate::RESP;
 use std::time::Duration;
@@ -63,7 +63,8 @@ pub async fn process_request(request: Request, server: &mut Server) {
     let elements = match &request.value {
         RESP::Array(v) => v,
         _ => {
-            panic!()
+            request.error(ServerError::IncorrectData).await;
+            return;
         }
     };
 
@@ -77,14 +78,18 @@ pub async fn process_request(request: Request, server: &mut Server) {
         match elem {
             RESP::BulkString(v) => command.push(v.clone()),
             _ => {
-                panic!()
+                request.error(ServerError::IncorrectData).await;
+                return;
             }
         }
     }
 
     let storage = match server.storage.as_mut() {
         Some(storage) => storage,
-        None => panic!(),
+        None => {
+            request.error(ServerError::StorageNotInitialised).await;
+            return;
+        }
     };
 
     // Process the command contained in the request.
@@ -92,11 +97,7 @@ pub async fn process_request(request: Request, server: &mut Server) {
 
     match response {
         Ok(v) => {
-            request
-                .sender
-                .send(ServerMessage::Data(ServerValue::RESP(v)))
-                .await
-                .unwrap();
+            request.data(ServerValue::RESP(v)).await;
         }
         Err(_e) => (),
     }
