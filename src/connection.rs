@@ -59,6 +59,21 @@ pub async fn run_listener(host: String, port: u16, server_sender: mpsc::Sender<C
     }
 }
 
+// Initialise and manage a connection with the master.
+pub async fn run_master_listener(
+    host: String,
+    port: u16,
+    server_sender: mpsc::Sender<ConnectionMessage>,
+) {
+    // Actively connect to the master
+    let stream = TcpStream::connect(format!("{}:{}", host, port))
+        .await
+        .unwrap();
+
+    // Spawn a task to take care of this connection.
+    tokio::spawn(async move { handle_connection(stream, server_sender.clone()).await });
+}
+
 // The main entry point for valid TCP connections.
 pub async fn handle_connection(
     mut stream: TcpStream,
