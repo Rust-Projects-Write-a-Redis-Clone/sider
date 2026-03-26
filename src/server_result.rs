@@ -38,8 +38,11 @@ impl fmt::Display for ServerError {
 
 #[derive(Debug, PartialEq)]
 pub enum ServerValue {
+    None,
     RESP(RESP),
 }
+
+pub type ServerResult = Result<ServerValue, ServerError>;
 
 #[derive(Debug, PartialEq)]
 pub enum ServerMessage {
