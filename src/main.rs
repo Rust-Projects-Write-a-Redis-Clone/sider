@@ -25,15 +25,31 @@ fn handle_connection(stream: &mut TcpStream) {
     // Create a buffer to host incoming data.
     let mut buffer = [0; 512];
 
-    // Read from the stream into the buffer.
-    stream.read(&mut buffer).unwrap();
+    loop {
+        // Read from the stream into the buffer.
+        match stream.read(&mut buffer) {
+            // If the stream returned some data,
+            // process the request.
+            Ok(size) if size != 0 => {
+                // Hardcoded response.
+                let response = "+PONG\r\n";
 
-    // Hardcoded response.
-    let response = "+PONG\r\n";
+                // Write the response to the stream.
+                stream.write(response.as_bytes()).unwrap();
 
-    // Write the response to the stream.
-    stream.write(response.as_bytes()).unwrap();
-
-    // Make sure the stream is flushed.
-    stream.flush().unwrap();
+                // Make sure the stream is flushed.
+                stream.flush().unwrap();
+            }
+            // If the stream returned no data
+            // the connection has been closed.
+            Ok(_) => {
+                println!("Connection closed");
+                break;
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                break;
+            }
+        }
+    }
 }
