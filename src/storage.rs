@@ -56,6 +56,11 @@ impl Storage {
         }
     }
 
+    // Turns on the storage active expiry.
+    pub fn set_active_expiry(&mut self, value: bool) {
+        self.active_expiry = value;
+    }
+
     // Check all keys with an expiry time.
     // If the key has expired remove it from the storage.
     pub fn expire_keys(&mut self) {
@@ -316,7 +321,7 @@ mod tests {
     // if active expiry is turned off.
     fn test_expire_keys_deactivated() {
         let mut storage: Storage = Storage::new();
-        storage.active_expiry = false;
+        storage.set_active_expiry(false);
 
         storage
             .set(String::from("akey"), String::from("avalue"), SetArgs::new())

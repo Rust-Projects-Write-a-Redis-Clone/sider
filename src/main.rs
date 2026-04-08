@@ -16,8 +16,11 @@ mod storage_result;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // Create and connect the storage and the server.
-    let storage = Storage::new();
+    // Create the storage and activate expiry.
+    let mut storage = Storage::new();
+    storage.set_active_expiry(true);
+
+    // Create the server and attach the storage.
     let mut server = Server::new();
     server.set_storage(storage);
 
