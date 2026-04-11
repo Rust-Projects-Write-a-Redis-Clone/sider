@@ -97,6 +97,7 @@ async fn main() -> std::io::Result<()> {
         run_master_listener(
             master_config.host.clone(),
             master_config.port,
+            &server.info,
             server_sender.clone(),
         )
         .await;
