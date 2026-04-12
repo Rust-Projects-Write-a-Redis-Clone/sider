@@ -2,7 +2,7 @@ use crate::commands::{echo, get, info, ping, psync, replconf, set};
 use crate::connection::{stream_send_receive_resp, ConnectionMessage};
 use crate::replication::ReplicationConfig;
 use crate::request::Request;
-use crate::server_result::{ServerError, ServerResult, ServerValue};
+use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::RESP;
 use std::time::Duration;
@@ -19,6 +19,7 @@ pub struct Server {
     pub info: ServerInfo,
     pub storage: Option<Storage>,
     pub replication: ReplicationConfig,
+    pub replica_senders: Vec<mpsc::Sender<ServerMessage>>,
 }
 
 impl Server {
@@ -30,6 +31,7 @@ impl Server {
             },
             storage: None,
             replication: ReplicationConfig::new_master(),
+            replica_senders: Vec::new(),
         }
     }
 
@@ -292,6 +294,7 @@ mod tests {
         let request = Request {
             value: RESP::Array(vec![RESP::BulkString(String::from("PING"))]),
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         let storage = Storage::new();
@@ -320,6 +323,7 @@ mod tests {
                 RESP::BulkString(String::from("42")),
             ]),
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         let storage = Storage::new();
@@ -346,6 +350,7 @@ mod tests {
         let request = Request {
             value: RESP::BulkString(String::from("PING")),
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         let storage = Storage::new();
@@ -373,6 +378,7 @@ mod tests {
         let request = Request {
             value: RESP::Array(vec![RESP::SimpleString(String::from("PING"))]),
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         let storage = Storage::new();

@@ -48,6 +48,7 @@ mod tests {
         let request = Request {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
+            binary: Vec::new(),
         };
 
         command(&mut server, &request, &cmd).await;
@@ -77,6 +78,7 @@ mod tests {
         let request = Request {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
+            binary: Vec::new(),
         };
 
         command(&mut server, &request, &cmd).await;

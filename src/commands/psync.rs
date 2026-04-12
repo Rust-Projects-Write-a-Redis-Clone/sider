@@ -27,6 +27,9 @@ pub async fn command(server: &mut Server, request: &Request, _command: &Vec<Stri
 
     // Send the RDB data.
     request.data(ServerValue::Binary(rdb)).await;
+
+    // Add the replica to the pool.
+    server.replica_senders.push(request.sender.clone());
 }
 
 #[cfg(test)]
@@ -49,6 +52,7 @@ mod tests {
         let request = Request {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
+            binary: Vec::new(),
         };
 
         server.replication.replid = String::from("some_repl_id");
