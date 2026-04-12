@@ -1,5 +1,7 @@
 use crate::commands::{echo, get, info, ping, psync, replconf, set};
-use crate::connection::{stream_read_line, stream_send_receive_resp, ConnectionMessage};
+use crate::connection::{
+    stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
+};
 use crate::replication::ReplicationConfig;
 use crate::request::Request;
 use crate::resp::{bytes_to_resp, resp_extract_length, resp_remove_type};
@@ -306,6 +308,16 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
 
     // Convert bytes into RDB length.
     let length = resp_extract_length(&buffer, &mut index).unwrap();
+
+    // Read the RDB data.
+    if let Some(_) = stream_read_data_length(stream, &mut buffer, length as usize)
+        .await
+        .err()
+    {
+        return Err(ServerError::HandshakeFailed(String::from(
+            "PSYNC failed, cannot read RDB",
+        )));
+    }
 
     Ok(ServerValue::None)
 }
