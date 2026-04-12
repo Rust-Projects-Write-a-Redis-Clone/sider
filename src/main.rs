@@ -1,3 +1,4 @@
+use crate::replication::ReplicationConfig;
 use crate::resp::RESP;
 use crate::storage::Storage;
 use clap::Parser;
@@ -8,6 +9,7 @@ use tokio::sync::mpsc;
 mod commands;
 
 mod connection;
+mod replication;
 mod request;
 mod resp;
 mod resp_result;
@@ -42,13 +44,18 @@ async fn main() -> std::io::Result<()> {
     // Parse the command line arguments.
     let args = Args::parse();
 
+    // Create the replication configuration.
+    let replication_config = ReplicationConfig::new_master();
+
     // Create the storage and activate expiry.
     let mut storage = Storage::new();
     storage.set_active_expiry(true);
 
-    // Create the server and attach the storage.
+    // Create the server, attach the storage
+    // and configure replication.
     let mut server = Server::new();
     server.set_storage(storage);
+    server.set_replication(replication_config);
 
     // Create the MPSC channel to communicate with the server.
     let (server_sender, server_receiver) = mpsc::channel::<ConnectionMessage>(32);
