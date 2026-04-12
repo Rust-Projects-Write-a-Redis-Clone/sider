@@ -1,7 +1,7 @@
 use crate::request::Request;
 use crate::resp::RESP;
 use crate::server::Server;
-use crate::server_result::{ServerError, ServerMessage, ServerValue};
+use crate::server_result::{ServerError, ServerValue};
 use crate::set::parse_set_arguments;
 
 pub async fn command(server: &mut Server, request: &Request, command: &Vec<String>) {
@@ -47,15 +47,6 @@ pub async fn command(server: &mut Server, request: &Request, command: &Vec<Strin
     request
         .data(ServerValue::RESP(RESP::SimpleString(String::from("OK"))))
         .await;
-
-    // Forward the given request to all replicas known to the server.
-    for replica_sender in server.replica_senders.iter() {
-        let _ = replica_sender
-            .send(ServerMessage::Data(ServerValue::Binary(
-                request.binary.clone(),
-            )))
-            .await;
-    }
 }
 
 #[cfg(test)]
