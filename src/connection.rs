@@ -227,3 +227,33 @@ pub async fn stream_send_receive_resp(
         .await
         .map_err(|e| ConnectionError::RequestFailed(data.to_string(), e.to_string()))
 }
+
+// Read bytes from the stream until the \r\n is reached (including those bytes).
+pub async fn stream_read_line(
+    stream: &mut TcpStream,
+    buffer: &mut [u8],
+) -> ConnectionResult<usize> {
+    let mut byte = [0; 1];
+    let mut index = 0;
+
+    // Keep reading every byte until we issue a break.
+    loop {
+        // Read one byte.
+        stream
+            .read_exact(&mut byte)
+            .await
+            .map_err(|e| ConnectionError::CannotReadFromStream(e.to_string()))?;
+
+        // Store the byte in the buffer.
+        buffer[index] = byte[0];
+
+        // Check if we reached the end of the line.
+        if buffer[index] == b'\n' && buffer[index - 1] == b'\r' {
+            break;
+        }
+
+        index += 1;
+    }
+
+    Ok(index)
+}

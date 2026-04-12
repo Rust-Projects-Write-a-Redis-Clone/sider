@@ -1,7 +1,8 @@
 use crate::commands::{echo, get, info, ping, psync, replconf, set};
-use crate::connection::{stream_send_receive_resp, ConnectionMessage};
+use crate::connection::{stream_read_line, stream_send_receive_resp, ConnectionMessage};
 use crate::replication::ReplicationConfig;
 use crate::request::Request;
+use crate::resp::bytes_to_resp;
 use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::RESP;
@@ -261,6 +262,31 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
                 e.to_string()
             ))
         })?;
+
+    /////////////////////////////////////
+    // The response will be
+    // * The FULLRESYNC: `+FULLRESYNC ID 0\r\n`
+    // * The RDB: `$LEN\r\nBINARY`
+
+    let mut index: usize = 0;
+
+    // Read the FULLRESYNC line.
+    if let Some(_) = stream_read_line(stream, &mut buffer).await.err() {
+        return Err(ServerError::HandshakeFailed(String::from(
+            "PSYNC failed, no FULLRESYNC",
+        )));
+    }
+
+    // Convert bytes into RESP.
+    let response = bytes_to_resp(&buffer, &mut index).ok();
+    match response {
+        Some(RESP::SimpleString(_)) => {}
+        _ => {
+            return Err(ServerError::HandshakeFailed(String::from(
+                "PSYNC failed, wrong FULLRESYNC response",
+            )));
+        }
+    };
 
     Ok(ServerValue::None)
 }
