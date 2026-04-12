@@ -15,6 +15,18 @@ pub async fn command(server: &mut Server, request: &Request, _command: &Vec<Stri
     )));
 
     request.data(resp).await;
+
+    // Generate the RDB data for the server.
+    let rdb = server.generate_rdb();
+
+    // Calculate the length of the RDB data.
+    let rdb_len = RESP::RDBPrefix(rdb.len());
+
+    // Send the RDB length.
+    request.data(ServerValue::RESP(rdb_len)).await;
+
+    // Send the RDB data.
+    request.data(ServerValue::Binary(rdb)).await;
 }
 
 #[cfg(test)]
