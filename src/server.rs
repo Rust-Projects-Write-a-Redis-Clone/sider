@@ -2,7 +2,7 @@ use crate::commands::{echo, get, info, ping, psync, replconf, set};
 use crate::connection::{stream_read_line, stream_send_receive_resp, ConnectionMessage};
 use crate::replication::ReplicationConfig;
 use crate::request::Request;
-use crate::resp::bytes_to_resp;
+use crate::resp::{bytes_to_resp, resp_extract_length, resp_remove_type};
 use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::RESP;
@@ -287,6 +287,25 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
             )));
         }
     };
+
+    // Read the RDB length.
+    if let Some(_) = stream_read_line(stream, &mut buffer).await.err() {
+        return Err(ServerError::HandshakeFailed(String::from(
+            "PSYNC failed, cannot read RDB length",
+        )));
+    }
+
+    index = 0;
+
+    // Remove the dollar sign.
+    if let Some(_) = resp_remove_type('$', &buffer, &mut index).err() {
+        return Err(ServerError::HandshakeFailed(String::from(
+            "PSYNC failed, RDB doesn't start with $",
+        )));
+    }
+
+    // Convert bytes into RDB length.
+    let length = resp_extract_length(&buffer, &mut index).unwrap();
 
     Ok(ServerValue::None)
 }
