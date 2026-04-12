@@ -1,17 +1,13 @@
 use crate::commands::{echo, get, info, ping, set};
-use crate::connection::ConnectionMessage;
+use crate::connection::{stream_send_receive_resp, ConnectionMessage};
 use crate::replication::ReplicationConfig;
 use crate::request::Request;
-use crate::resp::bytes_to_resp;
 use crate::server_result::{ServerError, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::RESP;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 pub struct ServerInfo {
     #[expect(dead_code)]
@@ -141,64 +137,27 @@ pub async fn process_request(request: Request, server: &mut Server) {
 // The implementation of the handshake process
 // between a replica and the master.
 pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResult {
-    // Handshake: PING
+    // Create a buffer to contain the response bytes.
+    let mut buffer = [0; 512];
+
+    /////////////////////////////////////
+    // Send PING
 
     // Prepare the RESP PING command.
     let ping = RESP::Array(vec![RESP::BulkString(String::from("PING"))]);
 
-    // Send the PING command.
-    stream
-        .write_all(ping.to_string().as_bytes())
+    // Send the command and read the response.
+    let resp = stream_send_receive_resp(stream, &ping, &mut buffer)
         .await
-        .map_err(|e| {
-            ServerError::HandshakeFailed(format!(
-                "Sending {} - Cannot write to stream: {}",
-                ping.to_string(),
-                e.to_string()
-            ))
-        })?;
-
-    // Create a buffer to contain the response bytes.
-    let mut buffer = [0; 512];
-
-    // Read the response bytes from the stream.
-    let size = stream.read(&mut buffer).await.map_err(|e| {
-        ServerError::HandshakeFailed(format!(
-            "Sending {} - Cannot read from stream: {}",
-            ping.to_string(),
-            e.to_string()
-        ))
-    })?;
-
-    // Check that the response contains data.
-    if size == 0 {
-        return Err(ServerError::HandshakeFailed(format!(
-            "Sending {} - Connection terminated",
-            ping.to_string()
-        )));
-    }
-
-    let mut index: usize = 0;
-
-    // Convert the raw bytes into RESP.
-    let resp = bytes_to_resp(&buffer, &mut index).map_err(|e| {
-        ServerError::HandshakeFailed(format!(
-            "Sending {} - Cannot convert binary to RESP: {}",
-            ping.to_string(),
-            e.to_string()
-        ))
-    })?;
+        .map_err(|e| ServerError::HandshakeFailed(e.to_string()))?;
 
     // Check that the response is correct.
     if resp != RESP::SimpleString(String::from("PONG")) {
-        return Err(ServerError::HandshakeFailed(format!(
-            "Sending {} - Wrong server answer: {}",
-            ping.to_string(),
-            resp.to_string()
-        )));
+        return Err(ServerError::HandshakeFailed(String::from("PING failed")));
     };
 
-    // Handshake: REPLCONF
+    /////////////////////////////////////
+    // Send REPLCONF listening-port xxx
 
     // Prepare the RESP REPLCONF command.
     let replconf = RESP::Array(vec![
@@ -207,48 +166,10 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
         RESP::BulkString(info.port.to_string()),
     ]);
 
-    // Send the REPLCONF command.
-    stream
-        .write_all(replconf.to_string().as_bytes())
+    // Send the command and read the response.
+    let resp = stream_send_receive_resp(stream, &replconf, &mut buffer)
         .await
-        .map_err(|e| {
-            ServerError::HandshakeFailed(format!(
-                "Sending {} - Cannot write to stream: {}",
-                replconf.to_string(),
-                e.to_string()
-            ))
-        })?;
-
-    // Create a buffer to contain the response bytes.
-    let mut buffer = [0; 512];
-
-    // Read the response bytes from the stream.
-    let size = stream.read(&mut buffer).await.map_err(|e| {
-        ServerError::HandshakeFailed(format!(
-            "Sending {} - Cannot read from stream: {}",
-            replconf.to_string(),
-            e.to_string()
-        ))
-    })?;
-
-    // Check that the response contains data.
-    if size == 0 {
-        return Err(ServerError::HandshakeFailed(format!(
-            "Sending {} - Connection terminated",
-            replconf.to_string()
-        )));
-    }
-
-    let mut index: usize = 0;
-
-    // Convert the raw bytes into RESP.
-    let resp = bytes_to_resp(&buffer, &mut index).map_err(|e| {
-        ServerError::HandshakeFailed(format!(
-            "Sending {} - Cannot convert binary to RESP: {}",
-            replconf.to_string(),
-            e.to_string()
-        ))
-    })?;
+        .map_err(|e| ServerError::HandshakeFailed(e.to_string()))?;
 
     // Check that the response is correct.
     if resp != RESP::SimpleString(String::from("OK")) {
@@ -259,7 +180,8 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
         )));
     };
 
-    // Handshake: REPLCONF
+    /////////////////////////////////////
+    // Send REPLCONF capa psync2
 
     // Prepare the RESP REPLCONF command.
     let replconf = RESP::Array(vec![
@@ -268,48 +190,10 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
         RESP::BulkString(String::from("psync2")),
     ]);
 
-    // Send the REPLCONF command.
-    stream
-        .write_all(replconf.to_string().as_bytes())
+    // Send the command and read the response.
+    let resp = stream_send_receive_resp(stream, &replconf, &mut buffer)
         .await
-        .map_err(|e| {
-            ServerError::HandshakeFailed(format!(
-                "Sending {} - Cannot write to stream: {}",
-                replconf.to_string(),
-                e.to_string()
-            ))
-        })?;
-
-    // Create a buffer to contain the response bytes..
-    let mut buffer = [0; 512];
-
-    // Read the response bytes from the stream.
-    let size = stream.read(&mut buffer).await.map_err(|e| {
-        ServerError::HandshakeFailed(format!(
-            "Sending {} - Cannot read from stream: {}",
-            replconf.to_string(),
-            e.to_string()
-        ))
-    })?;
-
-    // Check that the response contains data.
-    if size == 0 {
-        return Err(ServerError::HandshakeFailed(format!(
-            "Sending {} - Connection terminated",
-            replconf.to_string()
-        )));
-    }
-
-    let mut index: usize = 0;
-
-    // Convert the raw bytes into RESP.
-    let resp = bytes_to_resp(&buffer, &mut index).map_err(|e| {
-        ServerError::HandshakeFailed(format!(
-            "Sending {} - Cannot convert binary to RESP: {}",
-            replconf.to_string(),
-            e.to_string()
-        ))
-    })?;
+        .map_err(|e| ServerError::HandshakeFailed(e.to_string()))?;
 
     // Check that the response is correct.
     if resp != RESP::SimpleString(String::from("OK")) {
@@ -320,7 +204,8 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
         )));
     };
 
-    // Handshake: PSYNC
+    /////////////////////////////////////
+    // Send PSYNC ? -1
 
     // Prepare the RESP PSYNC command.
     let psync = RESP::Array(vec![

@@ -15,6 +15,7 @@ pub enum ConnectionError {
     CannotReadFromStream(String),
     CannotWriteToStream(String),
     MalformedRESP(String),
+    RequestFailed(String, String),
     ServerError(ServerError),
 }
 
@@ -29,6 +30,9 @@ impl fmt::Display for ConnectionError {
             }
             ConnectionError::MalformedRESP(string) => {
                 write!(f, "Cannot convert bytes to RESP: {}.", string)
+            }
+            ConnectionError::RequestFailed(request, e) => {
+                write!(f, "Request {} failed: {}.", request, e)
             }
             ConnectionError::ServerError(e) => {
                 write!(f, "{}", format!("Server error: {}", e))
@@ -203,4 +207,21 @@ async fn stream_read_resp(stream: &mut TcpStream, buffer: &mut [u8]) -> Connecti
 
     // Convert bytes to RESP.
     bytes_to_resp(&buffer, &mut index).map_err(|e| ConnectionError::MalformedRESP(e.to_string()))
+}
+
+// Write a RESP request to the stream and read the RESP response.
+pub async fn stream_send_receive_resp(
+    stream: &mut TcpStream,
+    data: &RESP,
+    buffer: &mut [u8],
+) -> ConnectionResult<RESP> {
+    // Write the RESP command to the stream.
+    stream_write_resp(stream, &data)
+        .await
+        .map_err(|e| ConnectionError::RequestFailed(data.to_string(), e.to_string()))?;
+
+    // Read the response in RESP format from the stream.
+    stream_read_resp(stream, buffer)
+        .await
+        .map_err(|e| ConnectionError::RequestFailed(data.to_string(), e.to_string()))
 }
