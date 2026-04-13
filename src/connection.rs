@@ -242,6 +242,12 @@ pub async fn stream_read_line<R: AsyncRead + Unpin>(
     let mut byte = [0; 1];
     let mut index = 0;
 
+    // Track the byte we read in the previous iteration
+    // so that we can detect the terminator \r\n without
+    // ever indexing the buffer backwards. We initialise
+    // it to 0, which is neither \r nor \n.
+    let mut previous_byte: u8 = 0;
+
     // Keep reading every byte until we issue a break.
     loop {
         // Read one byte.
@@ -254,10 +260,11 @@ pub async fn stream_read_line<R: AsyncRead + Unpin>(
         buffer[index] = byte[0];
 
         // Check if we reached the end of the line.
-        if buffer[index] == b'\n' && buffer[index - 1] == b'\r' {
+        if byte[0] == b'\n' && previous_byte == b'\r' {
             break;
         }
 
+        previous_byte = byte[0];
         index += 1;
     }
 
@@ -307,5 +314,20 @@ mod tests {
 
         assert_eq!(&buffer[..=index], b"OK\r\n");
         assert_eq!(index, 3);
+    }
+
+    #[tokio::test]
+    // Test that the function stream_read_line does
+    // not panic when the stream sends \n as the very
+    // first byte. A lone \n is not preceded by a \r
+    // and must not be interpreted as the terminator.
+    async fn test_stream_read_line_leading_newline() {
+        let mut stream: &[u8] = b"\n\r\n";
+        let mut buffer = [0u8; 16];
+
+        let index = stream_read_line(&mut stream, &mut buffer).await.unwrap();
+
+        assert_eq!(&buffer[..=index], b"\n\r\n");
+        assert_eq!(index, 2);
     }
 }
