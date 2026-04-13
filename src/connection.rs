@@ -12,6 +12,7 @@ use tokio::{
 
 #[derive(Debug)]
 pub enum ConnectionError {
+    BufferTooSmall(usize),
     CannotReadFromStream(String),
     CannotWriteToStream(String),
     MalformedRESP(String),
@@ -22,6 +23,9 @@ pub enum ConnectionError {
 impl fmt::Display for ConnectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ConnectionError::BufferTooSmall(size) => {
+                write!(f, "Buffer too small, size {}.", size)
+            }
             ConnectionError::CannotReadFromStream(string) => {
                 write!(f, "Cannot read from stream: {}.", string)
             }
@@ -250,6 +254,12 @@ pub async fn stream_read_line<R: AsyncRead + Unpin>(
 
     // Keep reading every byte until we issue a break.
     loop {
+        // Make sure we still have room in the buffer
+        // before consuming another byte from the stream.
+        if index >= buffer.len() {
+            return Err(ConnectionError::BufferTooSmall(buffer.len()));
+        }
+
         // Read one byte.
         stream
             .read_exact(&mut byte)
@@ -329,5 +339,22 @@ mod tests {
 
         assert_eq!(&buffer[..=index], b"\n\r\n");
         assert_eq!(index, 2);
+    }
+
+    #[tokio::test]
+    // Test that the function stream_read_line returns
+    // a BufferTooSmall error when the caller's buffer
+    // cannot hold the whole line, instead of panicking
+    // or writing past the end of the buffer.
+    async fn test_stream_read_line_buffer_too_small() {
+        let mut stream: &[u8] = b"HELLO\r\n";
+        let mut buffer = [0u8; 3];
+
+        match stream_read_line(&mut stream, &mut buffer).await {
+            Err(ConnectionError::BufferTooSmall(size)) => {
+                assert_eq!(size, 3);
+            }
+            _ => panic!(),
+        }
     }
 }
