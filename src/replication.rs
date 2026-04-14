@@ -1,3 +1,8 @@
+use rand::{
+    distr::{Alphanumeric, SampleString},
+    rng,
+};
+
 #[derive(Debug, PartialEq)]
 pub enum Role {
     Master,
@@ -7,6 +12,8 @@ pub enum Role {
 #[derive(Debug, PartialEq)]
 pub struct ReplicationInfo {
     pub role: Role,
+    pub replid: String,
+    pub repl_offset: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,11 +24,17 @@ pub struct MasterConfig {
 
 pub struct ReplicationConfig {
     pub master: Option<MasterConfig>,
+    pub replid: String,
+    pub repl_offset: usize,
 }
 
 impl ReplicationConfig {
     pub fn new_master() -> Self {
-        ReplicationConfig { master: None }
+        ReplicationConfig {
+            master: None,
+            replid: Alphanumeric.sample_string(&mut rng(), 40),
+            repl_offset: 0,
+        }
     }
 
     pub fn new_replica(master_host: String, master_port: u16) -> Self {
@@ -30,6 +43,8 @@ impl ReplicationConfig {
                 host: master_host,
                 port: master_port,
             }),
+            replid: Alphanumeric.sample_string(&mut rng(), 40),
+            repl_offset: 0,
         }
     }
 
@@ -40,6 +55,8 @@ impl ReplicationConfig {
                 Some(_) => Role::Replica,
                 None => Role::Master,
             },
+            replid: self.replid.clone(),
+            repl_offset: self.repl_offset,
         }
     }
 }
@@ -55,6 +72,8 @@ mod tests {
         let config = ReplicationConfig::new_master();
 
         assert_eq!(config.master, None);
+        assert_eq!(config.replid.len(), 40);
+        assert_eq!(config.repl_offset, 0);
     }
 
     #[test]
@@ -70,6 +89,8 @@ mod tests {
                 port: 1234
             })
         );
+        assert_eq!(config.replid.len(), 40);
+        assert_eq!(config.repl_offset, 0);
     }
 
     #[test]
@@ -79,7 +100,9 @@ mod tests {
     fn test_replication_info_master() {
         let config = ReplicationConfig::new_master();
 
-        assert_eq!(config.info(), ReplicationInfo { role: Role::Master });
+        assert_eq!(config.info().role, Role::Master);
+        assert_eq!(config.info().replid.len(), 40);
+        assert_eq!(config.info().repl_offset, 0);
     }
 
     #[test]
@@ -89,11 +112,8 @@ mod tests {
     fn test_replication_info_replica() {
         let config = ReplicationConfig::new_replica(String::from("other"), 1234);
 
-        assert_eq!(
-            config.info(),
-            ReplicationInfo {
-                role: Role::Replica
-            }
-        );
+        assert_eq!(config.info().role, Role::Replica);
+        assert_eq!(config.info().replid.len(), 40);
+        assert_eq!(config.info().repl_offset, 0);
     }
 }

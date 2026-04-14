@@ -18,6 +18,12 @@ pub async fn command(server: &mut Server, request: &Request, _command: &Vec<Stri
         Role::Master => output.push(String::from("role:master")),
     };
 
+    output.push(format!("master_replid:{}", replication_info.replid));
+    output.push(format!(
+        "master_repl_offset:{}",
+        replication_info.repl_offset
+    ));
+
     request
         .data(ServerValue::RESP(bulk_string_from_vec(output)))
         .await;
@@ -53,6 +59,8 @@ mod tests {
 
         assert!(response.contains("# Replication"));
         assert!(response.contains("role:master"));
+        assert!(response.contains("master_replid:"));
+        assert!(response.contains("master_repl_offset:0"));
     }
 
     #[tokio::test]
@@ -79,5 +87,6 @@ mod tests {
 
         assert!(response.contains("# Replication"));
         assert!(response.contains("role:slave"));
+        assert!(response.contains("master_repl_offset:0"));
     }
 }
