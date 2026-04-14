@@ -23,6 +23,7 @@ pub struct Server {
     pub storage: Option<Storage>,
     pub replication: ReplicationConfig,
     pub replica_senders: Vec<mpsc::Sender<ServerMessage>>,
+    pub wait_handler_sender: Option<mpsc::Sender<ServerMessage>>,
 }
 
 impl Server {
@@ -35,6 +36,7 @@ impl Server {
             storage: None,
             replication: ReplicationConfig::new_master(),
             replica_senders: Vec::new(),
+            wait_handler_sender: None,
         }
     }
 
@@ -92,6 +94,19 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
 
             _ = interval_timer.tick() => {
                 server.expire_keys();
+            }
+        }
+    }
+}
+
+// Collect replica ACKs over an interval.
+pub async fn wait_handler(mut wait_handler_receiver: mpsc::Receiver<ServerMessage>) {
+    let mut acks: i64 = 0;
+
+    loop {
+        tokio::select! {
+            Some(_) = wait_handler_receiver.recv() => {
+                acks += 1;
             }
         }
     }

@@ -26,6 +26,7 @@ pub struct ReplicationConfig {
     pub master: Option<MasterConfig>,
     pub replid: String,
     pub repl_offset: usize,
+    pub pending_write_operations: bool,
 }
 
 impl ReplicationConfig {
@@ -34,6 +35,7 @@ impl ReplicationConfig {
             master: None,
             replid: Alphanumeric.sample_string(&mut rng(), 40),
             repl_offset: 0,
+            pending_write_operations: false,
         }
     }
 
@@ -45,6 +47,7 @@ impl ReplicationConfig {
             }),
             replid: Alphanumeric.sample_string(&mut rng(), 40),
             repl_offset: 0,
+            pending_write_operations: false,
         }
     }
 
