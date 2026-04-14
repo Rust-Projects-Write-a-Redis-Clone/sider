@@ -5,6 +5,7 @@ use std::fmt;
 pub enum RESP {
     Array(Vec<RESP>),
     BulkString(String),
+    Integer(i64),
     Null,
     RDBPrefix(usize),
     SimpleString(String),
@@ -24,6 +25,7 @@ impl fmt::Display for RESP {
                 output
             }
             Self::BulkString(data) => format!("${}\r\n{}\r\n", data.len(), data),
+            Self::Integer(data) => format!(":{}\r\n", data),
             Self::Null => String::from("$-1\r\n"),
             Self::RDBPrefix(data) => format!("${}\r\n", data.to_string()),
             Self::SimpleString(data) => format!("+{}\r\n", data),
