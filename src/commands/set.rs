@@ -54,6 +54,13 @@ pub async fn command(server: &mut Server, request: &Request, command: &Vec<Strin
         return;
     };
 
+    // If the server is the master, toggle the
+    // flag to signal that at least one write
+    // operation has happened.
+    if !server.replication.is_replica() {
+        server.replication.pending_write_operations = true;
+    }
+
     // When the master forwards a SET command to
     // a replica the replica must stay silent.
     if request.master_connection {
@@ -236,5 +243,68 @@ mod tests {
             request_channel_rx.try_recv().unwrap_err(),
             mpsc::error::TryRecvError::Empty
         );
+    }
+
+    #[tokio::test]
+    // Test that a successful SET on a master toggles
+    // pending_write_operations.
+    async fn test_command_master_sets_pending_write_operations() {
+        let storage = Storage::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        assert_eq!(server.replication.pending_write_operations, false);
+
+        let cmd = vec![
+            String::from("set"),
+            String::from("key"),
+            String::from("value"),
+        ];
+
+        let (request_channel_tx, _request_channel_rx) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: RESP::Null,
+            sender: request_channel_tx.clone(),
+            binary: Vec::new(),
+            master_connection: false,
+        };
+
+        command(&mut server, &request, &cmd).await;
+
+        assert_eq!(server.replication.pending_write_operations, true);
+    }
+
+    #[tokio::test]
+    // Test that a SET propagated from the master to
+    // a replica does NOT toggle the replica's own
+    // pending_write_operations flag.
+    async fn test_command_replica_does_not_set_pending_write_operations() {
+        let storage = Storage::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_replication(ReplicationConfig::new_replica(
+            "otherhost".to_string(),
+            1234,
+        ));
+        server.set_storage(storage);
+
+        let cmd = vec![
+            String::from("set"),
+            String::from("key"),
+            String::from("value"),
+        ];
+
+        let (request_channel_tx, _request_channel_rx) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: RESP::Null,
+            sender: request_channel_tx.clone(),
+            binary: Vec::new(),
+            master_connection: true,
+        };
+
+        command(&mut server, &request, &cmd).await;
+
+        assert_eq!(server.replication.pending_write_operations, false);
     }
 }
