@@ -99,11 +99,27 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
     }
 }
 
-// Collect replica ACKs over an interval.
-pub async fn wait_handler(mut wait_handler_receiver: mpsc::Receiver<ServerMessage>) {
+// Collect replica ACKs and reply to the client
+// as soon as the requested number of replicas
+// has acknowledged.
+pub async fn wait_handler(
+    numreplicas: i64,
+    mut wait_handler_receiver: mpsc::Receiver<ServerMessage>,
+    client_sender: mpsc::Sender<ServerMessage>,
+) {
     let mut acks: i64 = 0;
 
     loop {
+        // When the requested number of replicas
+        // is reached, reply to the client on
+        // the provided sender.
+        if acks >= numreplicas {
+            let _ = client_sender
+                .send(ServerMessage::Data(ServerValue::RESP(RESP::Integer(acks))))
+                .await;
+            break;
+        }
+
         tokio::select! {
             Some(_) = wait_handler_receiver.recv() => {
                 acks += 1;

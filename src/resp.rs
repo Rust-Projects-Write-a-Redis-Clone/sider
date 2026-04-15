@@ -1,7 +1,7 @@
 use crate::resp_result::{RESPError, RESPLength, RESPResult};
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RESP {
     Array(Vec<RESP>),
     BulkString(String),
