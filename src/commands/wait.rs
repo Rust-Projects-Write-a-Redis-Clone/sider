@@ -29,6 +29,17 @@ pub async fn command(server: &mut Server, request: &Request, command: &Vec<Strin
         }
     };
 
+    // The command comes in the form `WAIT numreplicas timeout`.
+    let timeout: u64 = match command[2].parse() {
+        Ok(v) => v,
+        Err(_) => {
+            request
+                .error(ServerError::CommandSyntaxError(command.join(" ")))
+                .await;
+            return;
+        }
+    };
+
     // WAIT will process all pending operations.
     // Reset the flag.
     server.replication.pending_write_operations = false;
@@ -59,6 +70,7 @@ pub async fn command(server: &mut Server, request: &Request, command: &Vec<Strin
     // and a clone of the client's reply channel, so
     // it can answer the client directly.
     tokio::spawn(wait_handler(
+        timeout,
         numreplicas,
         wait_handler_receiver,
         request.sender.clone(),
