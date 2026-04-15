@@ -53,6 +53,7 @@ mod tests {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
             binary: Vec::new(),
+            master_connection: false,
         };
 
         server.replication.replid = String::from("some_repl_id");

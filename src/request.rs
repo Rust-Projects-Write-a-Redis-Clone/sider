@@ -9,6 +9,7 @@ pub struct Request {
     pub value: RESP,
     pub sender: mpsc::Sender<ServerMessage>,
     pub binary: Vec<u8>,
+    pub master_connection: bool,
 }
 
 impl Request {

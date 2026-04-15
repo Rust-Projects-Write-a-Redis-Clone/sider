@@ -49,6 +49,7 @@ mod tests {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&mut server, &request, &cmd).await;
@@ -79,6 +80,7 @@ mod tests {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&mut server, &request, &cmd).await;
