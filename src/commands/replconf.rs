@@ -36,7 +36,7 @@ pub async fn command(server: &Server, request: &Request, command: &Vec<String>) 
     let resp = RESP::Array(vec![
         RESP::BulkString(String::from("REPLCONF")),
         RESP::BulkString(String::from("ACK")),
-        RESP::BulkString(String::from("0")),
+        RESP::BulkString(server.replication.repl_offset.to_string()),
     ]);
 
     request.data(ServerValue::RESP(resp)).await;

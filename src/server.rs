@@ -171,6 +171,11 @@ pub async fn process_request(request: Request, server: &mut Server) {
                 .await;
         }
     }
+
+    // Track how many bytes have been processed
+    // by the server. The master will use this
+    // value to check if the replicas are in sync.
+    server.replication.repl_offset += request.binary.len();
 }
 
 // The implementation of the handshake process
