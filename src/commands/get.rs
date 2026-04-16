@@ -53,7 +53,7 @@ mod tests {
             .set("key".to_string(), "value".to_string(), SetArgs::new())
             .unwrap();
 
-        let mut server = Server::new();
+        let mut server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
         let cmd = vec![String::from("get"), String::from("key")];
@@ -79,7 +79,7 @@ mod tests {
     // returns the correct error when
     // the storage is not initialised.
     async fn test_storage_not_initialised() {
-        let mut server = Server::new();
+        let mut server = Server::new("localhost".to_string(), 6379);
 
         let cmd = vec![String::from("get"), String::from("key")];
 
@@ -105,7 +105,8 @@ mod tests {
     // the key is not specified.
     async fn test_wrong_syntax_missing_key() {
         let storage = Storage::new();
-        let mut server = Server::new();
+
+        let mut server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
         let cmd = vec![String::from("get")];

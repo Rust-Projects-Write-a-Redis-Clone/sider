@@ -84,7 +84,7 @@ async fn main() -> std::io::Result<()> {
 
     // Create the server, attach the storage
     // and configure replication.
-    let mut server = Server::new();
+    let mut server = Server::new(args.host.clone(), args.port);
     server.set_storage(storage);
     server.set_replication(replication_config);
 
