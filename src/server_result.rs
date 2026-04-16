@@ -55,3 +55,12 @@ pub enum ServerMessage {
     Data(ServerValue),
     Error(ServerError),
 }
+
+impl From<ServerResult> for ServerMessage {
+    fn from(result: ServerResult) -> Self {
+        match result {
+            Ok(v) => ServerMessage::Data(v),
+            Err(e) => ServerMessage::Error(e),
+        }
+    }
+}
