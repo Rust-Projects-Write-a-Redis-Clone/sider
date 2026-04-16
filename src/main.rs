@@ -37,6 +37,13 @@ struct Args {
         default_value_t = 6379
     )]
     port: u16,
+
+    #[arg(
+        short,
+        long,
+        help = "The master server for this replica, in the form `address port`"
+    )]
+    replicaof: Option<String>,
 }
 
 #[tokio::main]
@@ -44,8 +51,32 @@ async fn main() -> std::io::Result<()> {
     // Parse the command line arguments.
     let args = Args::parse();
 
-    // Create the replication configuration.
-    let replication_config = ReplicationConfig::new_master();
+    // Create the replication configuration
+    // according to the options passed on the command line.
+    let replication_config = match args.replicaof {
+        None => ReplicationConfig::new_master(),
+        Some(params) => {
+            // Split host and port that are provided as a single string.
+            let (host, port_string) = match params.split_once(" ") {
+                Some(value) => value,
+                None => {
+                    eprintln!("Please provide 'HOST PORT' separated by space");
+                    std::process::exit(1);
+                }
+            };
+
+            // Convert the port into a number.
+            let port: u16 = match port_string.parse() {
+                Ok(p) => p,
+                Err(_) => {
+                    eprintln!("Port is not a number");
+                    std::process::exit(1);
+                }
+            };
+
+            ReplicationConfig::new_replica(host.to_owned(), port)
+        }
+    };
 
     // Create the storage and activate expiry.
     let mut storage = Storage::new();
