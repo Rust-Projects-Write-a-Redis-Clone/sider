@@ -1,51 +1,62 @@
 use crate::request::Request;
 use crate::resp::RESP;
 use crate::server::Server;
-use crate::server_result::{ServerError, ServerMessage, ServerValue};
+use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
+use tokio::sync::mpsc;
 
 pub async fn command(server: &Server, request: &Request, command: &Vec<String>) {
-    // On a master, the REPLCONF is received either
-    // from the handshake process (in which case we
-    // reply with OK) or as a `REPLCONF ACK <offset>`
-    // sent by a replica in response to a GETACK we
-    // previously issued.
-    if !server.replication.is_replica() {
-        // A replica is reporting its offset in
-        // response to a GETACK. Send an empty
-        // message to the wait handler and stay
-        // silent on the replica's own channel.
-        if command.len() >= 2 && command[1].to_uppercase() == String::from("ACK") {
-            if let Some(tx) = &server.wait_handler_sender {
-                // The wait handler might have already
-                // dropped its receiver.
-                // Ignore the send error.
-                let _ = tx.send(ServerMessage::Data(ServerValue::None)).await;
-            }
-            return;
+    let result = if server.replication.is_replica() {
+        command_replica(server, command)
+    } else {
+        command_master(server.wait_handler_sender.clone(), command).await
+    };
+
+    request.result(result).await;
+}
+
+// On a master, the REPLCONF is received either
+// from the handshake process (in which case we
+// reply with OK) or as a `REPLCONF ACK <offset>`
+// sent by a replica in response to a GETACK we
+// previously issued, which shouldn't produce
+// any reply.
+async fn command_master(
+    wait_handler_sender: Option<mpsc::Sender<ServerMessage>>,
+    command: &Vec<String>,
+) -> ServerResult {
+    // A replica is reporting its offset in
+    // response to a GETACK. Send an empty
+    // message to the wait handler and stay
+    // silent on the replica's own channel.
+    if command.len() >= 2 && command[1].to_uppercase() == String::from("ACK") {
+        if let Some(tx) = wait_handler_sender {
+            // The wait handler might have already
+            // dropped its receiver.
+            // Ignore the send error.
+            let _ = tx.send(ServerMessage::Data(ServerValue::None)).await;
         }
 
-        request
-            .data(ServerValue::RESP(RESP::SimpleString("OK".to_string())))
-            .await;
-        return;
+        return Ok(ServerValue::None);
     }
 
+    Ok(ServerValue::RESP(RESP::SimpleString("OK".to_string())))
+}
+
+// On a replica, the master sends `REPLCONF GETACK *`
+// and expects a `REPLCONF ACK <offset>` reply
+// reporting how many bytes of the replication stream
+// the replica processed.
+fn command_replica(server: &Server, command: &Vec<String>) -> ServerResult {
     // On a replica, the master sends `REPLCONF GETACK *`
     // and expects a `REPLCONF ACK <offset>` reply.
     if command.len() != 3 {
-        request
-            .error(ServerError::CommandSyntaxError(command.join(" ")))
-            .await;
-        return;
+        return Err(ServerError::CommandSyntaxError(command.join(" ")));
     }
 
     // The only subcommand that REPLCONF supports
     // on a replica is GETACK. Reject anything else.
     if command[1].to_uppercase() != String::from("GETACK") {
-        request
-            .error(ServerError::CommandSyntaxError(command.join(" ")))
-            .await;
-        return;
+        return Err(ServerError::CommandSyntaxError(command.join(" ")));
     }
 
     // Create the response for the server.
@@ -55,7 +66,7 @@ pub async fn command(server: &Server, request: &Request, command: &Vec<String>) 
         RESP::BulkString(server.replication.repl_offset.to_string()),
     ]);
 
-    request.data(ServerValue::RESP(resp)).await;
+    Ok(ServerValue::RESP(resp))
 }
 
 #[cfg(test)]
@@ -302,8 +313,8 @@ mod tests {
         );
 
         assert_eq!(
-            connection_receiver.try_recv().unwrap_err(),
-            mpsc::error::TryRecvError::Empty
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::None)
         );
     }
 
@@ -331,8 +342,8 @@ mod tests {
         command(&server, &request, &cmd).await;
 
         assert_eq!(
-            connection_receiver.try_recv().unwrap_err(),
-            mpsc::error::TryRecvError::Empty
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::None)
         );
     }
 }
