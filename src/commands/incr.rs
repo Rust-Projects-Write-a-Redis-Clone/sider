@@ -56,7 +56,9 @@ pub async fn command(server: &mut Server, request: &Request, command: &Vec<Strin
                     }
                 }
                 // The value is not an integer.
-                Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
+                Err(_) => Ok(ServerValue::RESP(RESP::SimpleError(String::from(
+                    "ERR value is not an integer or out of range",
+                )))),
             }
         }
         // An error occurred while reading the key.
@@ -225,7 +227,9 @@ mod tests {
 
         assert_eq!(
             connection_receiver.try_recv().unwrap(),
-            ServerMessage::Error(ServerError::CommandInternalError("incr key".to_string()))
+            ServerMessage::Data(ServerValue::RESP(RESP::SimpleError(String::from(
+                "ERR value is not an integer or out of range"
+            ))))
         );
     }
 }

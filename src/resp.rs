@@ -8,6 +8,7 @@ pub enum RESP {
     Integer(i64),
     Null,
     RDBPrefix(usize),
+    SimpleError(String),
     SimpleString(String),
 }
 
@@ -28,6 +29,7 @@ impl fmt::Display for RESP {
             Self::Integer(data) => format!(":{}\r\n", data),
             Self::Null => String::from("$-1\r\n"),
             Self::RDBPrefix(data) => format!("${}\r\n", data.to_string()),
+            Self::SimpleError(data) => format!("-{}\r\n", data),
             Self::SimpleString(data) => format!("+{}\r\n", data),
         };
 
