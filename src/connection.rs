@@ -49,6 +49,7 @@ type ConnectionResult<T> = Result<T, ConnectionError>;
 
 #[derive(Debug)]
 pub enum ConnectionMessage {
+    NewClient(mpsc::Sender<ServerMessage>),
     Request(Request),
 }
 

@@ -8,6 +8,7 @@ use crate::resp::{bytes_to_resp, resp_extract_length, resp_remove_type};
 use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::RESP;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
@@ -24,6 +25,7 @@ pub struct Server {
     pub replication: ReplicationConfig,
     pub replica_senders: Vec<mpsc::Sender<ServerMessage>>,
     pub wait_handler_sender: Option<mpsc::Sender<ServerMessage>>,
+    pub next_client_id: AtomicU64,
 }
 
 impl Server {
@@ -37,6 +39,7 @@ impl Server {
             replication: ReplicationConfig::new_master(),
             replica_senders: Vec::new(),
             wait_handler_sender: None,
+            next_client_id: AtomicU64::new(1),
         }
     }
 
@@ -84,6 +87,17 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
             // Keep listening for messages on the incoming channel.
             Some(message) = crx.recv() => {
                 match message {
+                    // A new client has connected. Assign an ID
+                    // and store the client in the server.
+                    ConnectionMessage::NewClient(sender) => {
+                        // Get the current ID and atomically
+                        // increase it.
+                        let client_id = server.next_client_id.fetch_add(1, Ordering::Relaxed);
+
+                        // Send the client ID to the Connection Handler.
+                        // CODE HERE
+                    }
+
                     // If the message contains a request, extract it.
                     ConnectionMessage::Request(request) => {
                         // Process the request.
