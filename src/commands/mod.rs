@@ -1,4 +1,5 @@
 pub mod echo;
+pub mod exec;
 pub mod get;
 pub mod incr;
 pub mod info;
