@@ -49,6 +49,7 @@ mod tests {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -80,6 +81,7 @@ mod tests {
             value: RESP::Null,
             sender: request_channel_tx.clone(),
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 

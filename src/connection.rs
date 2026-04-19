@@ -172,6 +172,7 @@ pub async fn handle_connection(
                                 value: resp,
                                 sender: connection_sender.clone(),
                                 binary: buffer[start..index].to_vec(),
+                                client_id: client_id,
                                 master_connection,
                             };
 

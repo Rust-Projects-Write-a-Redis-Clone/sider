@@ -96,6 +96,7 @@ mod tests {
             value: RESP::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -129,6 +130,7 @@ mod tests {
             value: RESP::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -168,6 +170,7 @@ mod tests {
             value: RESP::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -219,6 +222,7 @@ mod tests {
             value: RESP::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 

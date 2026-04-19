@@ -448,6 +448,7 @@ mod tests {
             value: RESP::Array(vec![RESP::BulkString(String::from("PING"))]),
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -478,6 +479,7 @@ mod tests {
             ]),
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -506,6 +508,7 @@ mod tests {
             value: RESP::BulkString(String::from("PING")),
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
@@ -535,6 +538,7 @@ mod tests {
             value: RESP::Array(vec![RESP::SimpleString(String::from("PING"))]),
             sender: connection_sender,
             binary: Vec::new(),
+            client_id: 1,
             master_connection: false,
         };
 
