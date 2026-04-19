@@ -95,7 +95,10 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
                         let client_id = server.next_client_id.fetch_add(1, Ordering::Relaxed);
 
                         // Send the client ID to the Connection Handler.
-                        // CODE HERE
+                        if let Err(_) = sender.send(ServerMessage::ClientInit(client_id)).await {
+                            eprintln!("Error initialising client");
+                            return;
+                        }
                     }
 
                     // If the message contains a request, extract it.
