@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 
 mod commands;
 
+mod client;
 mod connection;
 mod replication;
 mod request;
