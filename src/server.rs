@@ -27,6 +27,7 @@ pub struct Server {
     pub replication: ReplicationConfig,
     pub replica_senders: Vec<mpsc::Sender<ServerMessage>>,
     pub wait_handler_sender: Option<mpsc::Sender<ServerMessage>>,
+    pub self_sender: Option<mpsc::Sender<ConnectionMessage>>,
     pub next_client_id: AtomicU64,
     pub clients: HashMap<u64, Client>,
 }
@@ -42,6 +43,7 @@ impl Server {
             replication: ReplicationConfig::new_master(),
             replica_senders: Vec::new(),
             wait_handler_sender: None,
+            self_sender: None,
             next_client_id: AtomicU64::new(1),
             clients: HashMap::new(),
         }
