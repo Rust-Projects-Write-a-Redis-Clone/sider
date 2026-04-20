@@ -1,5 +1,7 @@
 use crate::client::Client;
-use crate::commands::{echo, exec, get, incr, info, multi, ping, psync, replconf, set, wait};
+use crate::commands::{
+    discard, echo, exec, get, incr, info, multi, ping, psync, replconf, set, wait,
+};
 use crate::connection::{
     stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
 };
@@ -229,9 +231,14 @@ pub async fn process_request(request: Request, server: &mut Server) {
     // Extract the command name to route the request.
     let command_name = command[0].to_lowercase();
 
+    // List of commands that should be executed immediately
+    // even when in multi mode.
+    let ignored_commands = vec!["exec", "discard"];
+
     // If the client is in multi mode and the command
-    // is not EXEC, queue the request and reply QUEUED.
-    if client.multi && command_name != "exec" {
+    // is not in the list above, queue the request
+    // and reply QUEUED.
+    if client.multi && !ignored_commands.contains(&command_name.as_str()) {
         request
             .data(ServerValue::RESP(RESP::SimpleString(String::from(
                 "QUEUED",
@@ -243,6 +250,9 @@ pub async fn process_request(request: Request, server: &mut Server) {
 
     // Process the request using the requested command.
     match command_name.as_str() {
+        "discard" => {
+            discard::command(server, &request, &command).await;
+        }
         "echo" => {
             echo::command(server, &request, &command).await;
         }
