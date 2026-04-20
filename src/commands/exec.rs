@@ -1,6 +1,6 @@
 use crate::request::Request;
 use crate::resp::RESP;
-use crate::server::Server;
+use crate::server::{exec_handler, Server};
 use crate::server_result::{ServerError, ServerValue};
 
 pub async fn command(server: &mut Server, request: &Request, _command: &Vec<String>) {
@@ -33,9 +33,36 @@ pub async fn command(server: &mut Server, request: &Request, _command: &Vec<Stri
     // transaction. After this, multi should be off.
     client.multi = false;
 
-    request
-        .data(ServerValue::RESP(RESP::Array(Vec::new())))
-        .await;
+    // If there are no requests it's pointless to
+    // spawn the exec handler.
+    if client.requests.len() == 0 {
+        request
+            .data(ServerValue::RESP(RESP::Array(Vec::new())))
+            .await;
+        return;
+    }
+
+    // To execute the transaction the server
+    // needs to have a self sender. This should be
+    // initialised but as it's optional we need to check.
+    let server_sender = match &server.self_sender {
+        Some(sender) => sender.clone(),
+        None => {
+            request
+                .error(ServerError::CommandInternalError(String::from(
+                    "Server self sender not initialised",
+                )))
+                .await;
+            return;
+        }
+    };
+
+    // Spawn the Exec Handler.
+    tokio::spawn(exec_handler(
+        client.requests.clone(),
+        server_sender,
+        client.sender.clone(),
+    ));
 }
 
 #[cfg(test)]

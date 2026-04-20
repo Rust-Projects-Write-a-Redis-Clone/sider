@@ -4,7 +4,7 @@ use crate::{
 };
 use tokio::sync::mpsc;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Request {
     pub value: RESP,
     pub sender: mpsc::Sender<ServerMessage>,
