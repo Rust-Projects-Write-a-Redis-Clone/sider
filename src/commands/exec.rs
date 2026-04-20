@@ -84,7 +84,7 @@ mod tests {
 
         let mut server = Server::new("localhost".to_string(), 6379);
 
-        let client = Client::new(1);
+        let client = Client::new(1, connection_sender.clone());
         server.clients.insert(1, client);
 
         let request = Request {
@@ -115,7 +115,7 @@ mod tests {
 
         let mut server = Server::new("localhost".to_string(), 6379);
 
-        let mut client = Client::new(1);
+        let mut client = Client::new(1, connection_sender.clone());
         client.multi = true;
         server.clients.insert(1, client);
 

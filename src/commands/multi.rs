@@ -41,7 +41,7 @@ mod tests {
         let mut server = Server::new("localhost".to_string(), 6379);
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
-        let client = Client::new(1);
+        let client = Client::new(1, connection_sender.clone());
         server.clients.insert(1, client);
 
         let request = Request {

@@ -101,7 +101,7 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
                         let client_id = server.next_client_id.fetch_add(1, Ordering::Relaxed);
 
                         // Create the client.
-                        let client = Client::new(client_id);
+                        let client = Client::new(client_id, sender.clone());
 
                         // Add the client to the global register.
                         server.clients.insert(client_id, client);
@@ -481,6 +481,14 @@ mod tests {
     async fn test_process_request_ping() {
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
+        let storage = Storage::new();
+
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let client = Client::new(1, connection_sender.clone());
+        server.clients.insert(1, client);
+
         let request = Request {
             value: RESP::Array(vec![RESP::BulkString(String::from("PING"))]),
             sender: connection_sender,
@@ -488,14 +496,6 @@ mod tests {
             client_id: 1,
             master_connection: false,
         };
-
-        let storage = Storage::new();
-
-        let mut server: Server = Server::new("localhost".to_string(), 6379);
-        server.set_storage(storage);
-
-        let client = Client::new(1);
-        server.clients.insert(1, client);
 
         process_request(request, &mut server).await;
 
@@ -512,6 +512,14 @@ mod tests {
     async fn test_process_request_echo() {
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
+        let storage = Storage::new();
+
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let client = Client::new(1, connection_sender.clone());
+        server.clients.insert(1, client);
+
         let request = Request {
             value: RESP::Array(vec![
                 RESP::BulkString(String::from("ECHO")),
@@ -522,14 +530,6 @@ mod tests {
             client_id: 1,
             master_connection: false,
         };
-
-        let storage = Storage::new();
-
-        let mut server: Server = Server::new("localhost".to_string(), 6379);
-        server.set_storage(storage);
-
-        let client = Client::new(1);
-        server.clients.insert(1, client);
 
         process_request(request, &mut server).await;
 
