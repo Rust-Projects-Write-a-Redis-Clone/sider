@@ -441,6 +441,58 @@ pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResul
     Ok(ServerValue::None)
 }
 
+// Execute queued requests from a transaction and
+// send the collected results back to the client
+// as a single RESP array.
+pub async fn exec_handler(
+    requests: Vec<Request>,
+    server_sender: mpsc::Sender<ConnectionMessage>,
+    client_sender: mpsc::Sender<ServerMessage>,
+) {
+    // Create a vector to host the results
+    // of the stored requests.
+    let mut results: Vec<RESP> = Vec::new();
+
+    // Create a channel for this handler.
+    let (handler_sender, mut handler_receiver) = mpsc::channel::<ServerMessage>(32);
+
+    for mut request in requests.into_iter() {
+        // Replace the request sender with the
+        // handler sender. This way the server
+        // will send the response back here instead
+        // of sending it to the connection, and
+        // through that to the client.
+        // This allows us to collect responses and
+        // to send them back into a RESP array.
+        request.sender = handler_sender.clone();
+
+        // Send the request to the server.
+        if let Err(e) = server_sender
+            .send(ConnectionMessage::Request(request))
+            .await
+        {
+            eprintln!("Error sending request: {}", e);
+            return;
+        }
+
+        match handler_receiver.recv().await {
+            // We need to capture any response
+            // that contains RESP, as we need
+            // to collect all messages
+            // and send them back to the client.
+            Some(ServerMessage::Data(ServerValue::RESP(response))) => results.push(response),
+            _ => {}
+        }
+    }
+
+    // Create a RESP array out of the results vector.
+    let result = ServerValue::RESP(RESP::Array(results));
+
+    // Now send the RESP array to the connection
+    // and the client.
+    let _ = client_sender.send(ServerMessage::Data(result)).await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,6 +647,130 @@ mod tests {
         assert_eq!(
             connection_receiver.try_recv().unwrap(),
             ServerMessage::Error(ServerError::IncorrectData)
+        );
+    }
+
+    #[tokio::test]
+    // Test that exec_handler sends an empty RESP
+    // array to the client when given no requests.
+    async fn test_exec_handler_no_requests() {
+        let (server_sender, _server_receiver) = mpsc::channel::<ConnectionMessage>(32);
+        let (client_sender, mut client_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        exec_handler(Vec::new(), server_sender, client_sender).await;
+
+        assert_eq!(
+            client_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::RESP(RESP::Array(Vec::new())))
+        );
+    }
+
+    #[tokio::test]
+    // Test that exec_handler forwards each queued
+    // request to the server and collects the
+    // responses, in order, into a single RESP array
+    // sent to the client.
+    async fn test_exec_handler_collects_responses() {
+        let (server_sender, mut server_receiver) = mpsc::channel::<ConnectionMessage>(32);
+        let (client_sender, mut client_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        // Spawn a fake server that replies to each
+        // incoming request with an integer equal
+        // to the first argument of the request.
+        tokio::spawn(async move {
+            while let Some(ConnectionMessage::Request(request)) = server_receiver.recv().await {
+                let n: i64 = match &request.value {
+                    RESP::Array(v) => match &v[0] {
+                        RESP::BulkString(s) => s.parse().unwrap(),
+                        _ => 0,
+                    },
+                    _ => 0,
+                };
+                let _ = request
+                    .sender
+                    .send(ServerMessage::Data(ServerValue::RESP(RESP::Integer(n))))
+                    .await;
+            }
+        });
+
+        let (placeholder_sender, _placeholder_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let requests = vec![
+            Request {
+                value: RESP::Array(vec![RESP::BulkString(String::from("1"))]),
+                sender: placeholder_sender.clone(),
+                binary: Vec::new(),
+                client_id: 1,
+                master_connection: false,
+            },
+            Request {
+                value: RESP::Array(vec![RESP::BulkString(String::from("2"))]),
+                sender: placeholder_sender.clone(),
+                binary: Vec::new(),
+                client_id: 1,
+                master_connection: false,
+            },
+        ];
+
+        exec_handler(requests, server_sender, client_sender).await;
+
+        assert_eq!(
+            client_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::RESP(RESP::Array(vec![
+                RESP::Integer(1),
+                RESP::Integer(2),
+            ])))
+        );
+    }
+
+    #[tokio::test]
+    // Test that exec_handler silently drops
+    // responses that are not wrapped in
+    // ServerValue::RESP when collecting the results.
+    async fn test_exec_handler_drops_non_resp_responses() {
+        let (server_sender, mut server_receiver) = mpsc::channel::<ConnectionMessage>(32);
+        let (client_sender, mut client_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        // Spawn a fake server that alternates between
+        // a RESP integer response and a non-RESP
+        // Data::None response.
+        tokio::spawn(async move {
+            let mut toggle = false;
+            while let Some(ConnectionMessage::Request(request)) = server_receiver.recv().await {
+                let message = if toggle {
+                    ServerMessage::Data(ServerValue::None)
+                } else {
+                    ServerMessage::Data(ServerValue::RESP(RESP::Integer(42)))
+                };
+                toggle = !toggle;
+                let _ = request.sender.send(message).await;
+            }
+        });
+
+        let (placeholder_sender, _placeholder_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let requests = vec![
+            Request {
+                value: RESP::Array(vec![RESP::BulkString(String::from("a"))]),
+                sender: placeholder_sender.clone(),
+                binary: Vec::new(),
+                client_id: 1,
+                master_connection: false,
+            },
+            Request {
+                value: RESP::Array(vec![RESP::BulkString(String::from("b"))]),
+                sender: placeholder_sender.clone(),
+                binary: Vec::new(),
+                client_id: 1,
+                master_connection: false,
+            },
+        ];
+
+        exec_handler(requests, server_sender, client_sender).await;
+
+        assert_eq!(
+            client_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::RESP(RESP::Array(vec![RESP::Integer(42)])))
         );
     }
 }
