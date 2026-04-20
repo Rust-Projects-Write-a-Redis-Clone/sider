@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    select,
 };
 
 mod connection;
@@ -62,48 +63,54 @@ async fn handle_connection(mut stream: TcpStream, storage: Arc<Mutex<Storage>>) 
     let mut buffer = [0; 512];
 
     loop {
-        // Read from the stream into the buffer.
-        match stream.read(&mut buffer).await {
-            // If the stream returned some data,
-            // process the request.
-            Ok(size) if size != 0 => {
-                // Initialise the index to start at the
-                // beginning of the buffer.
-                let mut index: usize = 0;
+        select! {
+            // Data is available in the stream, read it.
+            result = stream.read(&mut buffer) => {
+                // Check if the incoming data is valid
+                // and act accordingly.
+                match result {
+                    // If the stream returned some data,
+                    // process the request.
+                    Ok(size) if size != 0 => {
+                        // Initialise the index to start at the
+                        // beginning of the buffer.
+                        let mut index: usize = 0;
 
-                // Process the bytes in the buffer according to
-                // the content and extract the request. Update the index.
-                let request = match bytes_to_resp(&buffer[..size].to_vec(), &mut index) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        return;
+                        // Process the bytes in the buffer according to
+                        // the content and extract the request. Update the index.
+                        let request = match bytes_to_resp(&buffer[..size].to_vec(), &mut index) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                eprintln!("Error: {}", e);
+                                return;
+                            }
+                        };
+
+                        // Process the request.
+                        let response = match process_request(request, storage.clone()) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                eprintln!("Error parsing command: {}", e);
+                                return;
+                            }
+                        };
+
+                        // Write the response to the stream.
+                        if let Err(e) = stream.write_all(response.to_string().as_bytes()).await {
+                            eprintln!("Error writing to socket: {}", e);
+                        }
                     }
-                };
-
-                // Process the request.
-                let response = match process_request(request, storage.clone()) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        eprintln!("Error parsing command: {}", e);
-                        return;
+                    // If the stream returned no data
+                    // the connection has bee closed.
+                    Ok(_) => {
+                        println!("Connection closed");
+                        break;
                     }
-                };
-
-                // Write the response to the stream.
-                if let Err(e) = stream.write_all(response.to_string().as_bytes()).await {
-                    eprintln!("Error writing to socket: {}", e);
+                    Err(e) => {
+                        println!("Error: {}", e);
+                        break;
+                    }
                 }
-            }
-            // If the stream returned no data
-            // the connection has been closed.
-            Ok(_) => {
-                println!("Connection closed");
-                break;
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-                break;
             }
         }
     }
