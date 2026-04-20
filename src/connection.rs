@@ -125,29 +125,35 @@ pub async fn handle_connection(
                         // beginning of the buffer.
                         let mut index: usize = 0;
 
-                        // Process the bytes in the buffer according to
-                        // the content and extract the request. Update the index.
-                        let resp = match bytes_to_resp(&buffer[..size].to_vec(), &mut index) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                eprintln!("Error: {}", e);
-                                return;
-                            }
-                        };
+                        // Keep reading until we processed the full
+                        // amount of data read from the stream.
+                        while index < size {
+                            let start: usize = index;
 
-                        // Create the request.
-                        let request = Request {
-                            value: resp,
-                            sender: connection_sender.clone(),
-                            binary: buffer[..size].to_vec(),
-                        };
+                            // Process the bytes in the buffer according to
+                            // the content and extract the request. Update the index.
+                            let resp = match bytes_to_resp(&buffer[..size].to_vec(), &mut index) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    eprintln!("Error: {}", e);
+                                    return;
+                                }
+                            };
 
-                        // Send the request to the server.
-                        match server_sender.send(ConnectionMessage::Request(request)).await {
-                            Ok(()) => {},
-                            Err(e) => {
-                                eprintln!("Error sending request: {}", e);
-                                return;
+                            // Create the request.
+                            let request = Request {
+                                value: resp,
+                                sender: connection_sender.clone(),
+                                binary: buffer[start..index].to_vec(),
+                            };
+
+                            // Send the request to the server.
+                            match server_sender.send(ConnectionMessage::Request(request)).await {
+                                Ok(()) => {},
+                                Err(e) => {
+                                    eprintln!("Error sending request: {}", e);
+                                    return;
+                                }
                             }
                         }
                     }
