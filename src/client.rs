@@ -1,4 +1,5 @@
 pub struct Client {
+    #[expect(dead_code)]
     pub client_id: u64,
     pub multi: bool,
 }
