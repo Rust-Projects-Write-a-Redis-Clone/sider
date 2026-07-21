@@ -278,6 +278,11 @@ pub fn bytes_to_resp(buffer: &[u8], index: &mut usize) -> RespResult<Resp> {
     }
 }
 
+// Create a bulk string from a vector of strings.
+pub fn bulk_string_from_vec(strings: &[String]) -> Resp {
+    Resp::BulkString(strings.join("\r\n"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -656,5 +661,21 @@ mod tests {
             Resp::Array(vec![Resp::simple_string("OK"), Resp::bulk_string("VALUE")])
         );
         assert_eq!(index, 20);
+    }
+
+    #[test]
+    fn test_bulk_string_from_vec() {
+        let strings = vec![
+            String::from("First string"),
+            String::from("Second string"),
+            String::from("Third string"),
+        ];
+
+        let bulk_string: Resp = bulk_string_from_vec(&strings);
+
+        assert_eq!(
+            bulk_string,
+            Resp::bulk_string("First string\r\nSecond string\r\nThird string")
+        );
     }
 }
