@@ -129,4 +129,53 @@ mod tests {
             _ => panic!(),
         }
     }
+
+    #[test]
+    // Test that the function binary_extract_line
+    // returns the correct error when we try to
+    // read bytes starting with an index that is
+    // already greater than the length of the buffer.
+    fn test_binary_extract_line_index_too_advanced() {
+        let buffer = b"OK";
+        let mut index: usize = 1;
+
+        match binary_extract_line(buffer, &mut index) {
+            Err(RespError::OutOfBounds(index)) => {
+                assert_eq!(index, 2);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function binary_extract_line
+    // returns the correct error when we try to
+    // read a buffer that contains only \r.
+    fn test_binary_extract_line_half_separator() {
+        let buffer = b"OK\r";
+        let mut index: usize = 0;
+
+        match binary_extract_line(buffer, &mut index) {
+            Err(RespError::OutOfBounds(index)) => {
+                assert_eq!(index, 3);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function binary_extract_line
+    // returns the correct error when we try to
+    // read a buffer that contains only \n.
+    fn test_binary_extract_line_incorrect_separator() {
+        let buffer = b"OK\n";
+        let mut index: usize = 0;
+
+        match binary_extract_line(buffer, &mut index) {
+            Err(RespError::OutOfBounds(index)) => {
+                assert_eq!(index, 3);
+            }
+            _ => panic!(),
+        }
+    }
 }
