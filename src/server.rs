@@ -1,6 +1,7 @@
+use crate::commands::{echo, get, ping, set};
 use crate::connection::ConnectionMessage;
 use crate::request::Request;
-use crate::server_result::{ServerError, ServerValue};
+use crate::server_result::ServerError;
 use crate::storage::Storage;
 use crate::Resp;
 use std::time::Duration;
@@ -84,28 +85,35 @@ pub async fn process_request(request: Request, server: &mut Server) {
         }
     }
 
-    let storage = match server.storage.as_mut() {
-        Some(storage) => storage,
-        None => {
-            request.error(ServerError::StorageNotInitialised).await;
-            return;
+    // Extract the command name to route the request.
+    let command_name = command[0].to_lowercase();
+
+    // Process the request using the requested command.
+    match command_name.as_str() {
+        "echo" => {
+            echo::command(server, &request, &command).await;
         }
-    };
-
-    // Process the command contained in the request.
-    let response = storage.process_command(&command);
-
-    // If the response is not an error send
-    // the content to the client.
-    if let Ok(v) = response {
-        request.data(ServerValue::Resp(v)).await;
+        "get" => {
+            get::command(server, &request, &command).await;
+        }
+        "ping" => {
+            ping::command(server, &request, &command).await;
+        }
+        "set" => {
+            set::command(server, &request, &command).await;
+        }
+        _ => {
+            request
+                .error(ServerError::CommandNotAvailable(command[0].clone()))
+                .await;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server_result::ServerMessage;
+    use crate::server_result::{ServerMessage, ServerValue};
 
     #[test]
     // Test that the structure Server can

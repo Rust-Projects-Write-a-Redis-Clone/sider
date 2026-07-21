@@ -4,6 +4,7 @@ use std::fmt;
 #[derive(Debug, PartialEq)]
 pub enum ServerError {
     CommandInternalError(String),
+    CommandNotAvailable(String),
     CommandSyntaxError(String),
     IncorrectData,
     StorageNotInitialised,
@@ -14,6 +15,10 @@ impl fmt::Display for ServerError {
         match self {
             Self::CommandInternalError(string) => {
                 write!(f, "Internal error while processing {}.", string)
+            }
+
+            Self::CommandNotAvailable(c) => {
+                write!(f, "The requested command {} is not available.", c)
             }
 
             Self::CommandSyntaxError(string) => {
