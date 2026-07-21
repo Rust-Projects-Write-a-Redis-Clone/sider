@@ -65,6 +65,15 @@ fn binary_extract_line(buffer: &[u8], index: &mut usize) -> RespResult<Vec<u8>> 
     Ok(output)
 }
 
+// Extracts bytes from the buffer until a `\r\n` is reached and converts them into a string.
+pub fn binary_extract_line_as_string(buffer: &[u8], index: &mut usize) -> RespResult<String> {
+    // Extract all possible bytes updating the index.
+    let line = binary_extract_line(buffer, index)?;
+
+    // Convert the bytes to a UTF-8 String.
+    Ok(String::from_utf8(line)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,5 +186,33 @@ mod tests {
             }
             _ => panic!(),
         }
+    }
+
+    #[test]
+    // Test that the function binary_extract_line_as_string
+    // correctly converts a buffer with a terminator
+    // into a String.
+    fn test_binary_extract_line_as_string() {
+        let buffer = b"OK\r\n";
+        let mut index: usize = 0;
+
+        let output = binary_extract_line_as_string(buffer, &mut index).unwrap();
+
+        assert_eq!(output, "OK");
+        assert_eq!(index, 4);
+    }
+
+    #[test]
+    // Test that the function binary_extract_line_as_string
+    // returns the correct error when we try to
+    // read a buffer that contains an invalid UTF-8
+    // sequence of bytes.
+    fn test_binary_extract_line_as_string_invalid_utf8() {
+        let buffer: Vec<u8> = vec![0xFF, 0xFE, b'\r', b'\n'];
+        let mut index: usize = 0;
+
+        let error = binary_extract_line_as_string(&buffer, &mut index).unwrap_err();
+
+        assert_eq!(error, RespError::FromUtf8);
     }
 }
