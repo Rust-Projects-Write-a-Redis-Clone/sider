@@ -2,11 +2,16 @@ use crate::commands::{echo, get, info, ping, set};
 use crate::connection::ConnectionMessage;
 use crate::replication::ReplicationConfig;
 use crate::request::Request;
+use crate::resp::bytes_to_resp;
 use crate::server_result::{ServerError, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::Resp;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 
 pub struct Server {
     pub storage: Option<Storage>,
@@ -124,7 +129,57 @@ pub async fn process_request(request: Request, server: &mut Server) {
 
 // The implementation of the handshake process
 // between a replica and the master.
-pub async fn handshake() -> ServerResult {
+pub async fn handshake(stream: &mut TcpStream) -> ServerResult {
+    // Handshake: PING
+
+    // Prepare the RESP PING command.
+    let ping = Resp::bulk_array(vec!["PING"]);
+
+    // Send the PING command.
+    stream
+        .write_all(ping.to_string().as_bytes())
+        .await
+        .map_err(|e| {
+            ServerError::HandshakeFailed(format!(
+                "Sending {} - Cannot write to stream: {}",
+                ping, e
+            ))
+        })?;
+
+    // Create a buffer to contain the response bytes.
+    let mut buffer = [0; 512];
+
+    // Read the response bytes from the stream.
+    let size = stream.read(&mut buffer).await.map_err(|e| {
+        ServerError::HandshakeFailed(format!("Sending {} - Cannot read from stream: {}", ping, e))
+    })?;
+
+    // Check that the response contains data.
+    if size == 0 {
+        return Err(ServerError::HandshakeFailed(format!(
+            "Sending {} - Connection terminated",
+            ping
+        )));
+    }
+
+    let mut index: usize = 0;
+
+    // Convert the raw bytes into RESP.
+    let resp = bytes_to_resp(&buffer, &mut index).map_err(|e| {
+        ServerError::HandshakeFailed(format!(
+            "Sending {} - Cannot convert binary to RESP: {}",
+            ping, e
+        ))
+    })?;
+
+    // Check that the response is correct.
+    if resp != Resp::simple_string("PONG") {
+        return Err(ServerError::HandshakeFailed(format!(
+            "Sending {} - Wrong server answer: {}",
+            ping, resp
+        )));
+    };
+
     Ok(ServerValue::None)
 }
 
