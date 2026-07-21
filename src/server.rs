@@ -47,6 +47,7 @@ pub fn process_request(request: Resp) -> ServerResult<Resp> {
     // that command.
     match command[0].to_lowercase().as_str() {
         "ping" => Ok(Resp::simple_string("PONG")),
+        "echo" => Ok(Resp::bulk_string(command[1])),
         _ => Err(ServerError::CommandError),
     }
 }
@@ -92,5 +93,17 @@ mod tests {
         let error = process_request(request).unwrap_err();
 
         assert_eq!(error, ServerError::CommandError);
+    }
+
+    #[test]
+    // Test that the function process_request
+    // processes an ECHO request and that it
+    // responds with a copy of the input.
+    fn test_process_request_echo() {
+        let request = Resp::bulk_array(vec!["ECHO", "42"]);
+
+        let output = process_request(request).unwrap();
+
+        assert_eq!(output, Resp::bulk_string("42"));
     }
 }
