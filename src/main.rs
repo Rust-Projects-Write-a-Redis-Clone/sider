@@ -1,4 +1,5 @@
 use crate::connection::{run_listener, ConnectionMessage};
+use crate::replication::ReplicationConfig;
 use crate::resp::Resp;
 use crate::server::{run_server, Server};
 use crate::storage::Storage;
@@ -8,6 +9,7 @@ use tokio::sync::mpsc;
 mod commands;
 
 mod connection;
+mod replication;
 mod request;
 mod resp;
 mod resp_result;
@@ -42,6 +44,9 @@ async fn main() -> std::io::Result<()> {
     // Parse the command line arguments.
     let args = Args::parse();
 
+    // Create the replication configuration.
+    let replication_config = ReplicationConfig::new_master();
+
     // Create the storage and activate expiry.
     let mut storage = Storage::new();
     storage.set_active_expiry(true);
@@ -49,6 +54,7 @@ async fn main() -> std::io::Result<()> {
     // Create the server and attach the storage.
     let mut server = Server::new();
     server.set_storage(storage);
+    server.set_replication(replication_config);
 
     // Create the MPSC channel to communicate with the server.
     let (server_sender, server_receiver) = mpsc::channel::<ConnectionMessage>(32);
