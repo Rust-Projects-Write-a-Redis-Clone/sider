@@ -105,6 +105,7 @@ pub async fn process_request(request: Request, server: &mut Server) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server_result::ServerMessage;
 
     #[test]
     // Test that the structure Server can
@@ -125,5 +126,108 @@ mod tests {
         server.set_storage(storage);
 
         assert!(server.storage.is_some());
+    }
+
+    #[tokio::test]
+    // Test that the function process_request
+    // processes a PING request and that it
+    // responds with a PONG.
+    async fn test_process_request_ping() {
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::bulk_array(vec!["PING"]),
+            sender: connection_sender,
+        };
+
+        let storage = Storage::new();
+
+        let mut server: Server = Server::new();
+        server.set_storage(storage);
+
+        process_request(request, &mut server).await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::simple_string("PONG")))
+        );
+    }
+
+    #[tokio::test]
+    // Test that the function process_request
+    // processes an ECHO request and that it
+    // responds with a copy of the input.
+    async fn test_process_request_echo() {
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::bulk_array(vec!["ECHO", "42"]),
+            sender: connection_sender,
+        };
+
+        let storage = Storage::new();
+
+        let mut server: Server = Server::new();
+        server.set_storage(storage);
+
+        process_request(request, &mut server).await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::bulk_string("42")))
+        );
+    }
+
+    #[tokio::test]
+    // Test that the function process_request
+    // returns the correct error when it is
+    // given a request that doesn't contain
+    // a RESP array.
+    async fn test_process_request_not_array() {
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::bulk_string("PING"),
+            sender: connection_sender,
+        };
+
+        let storage = Storage::new();
+
+        let mut server: Server = Server::new();
+        server.set_storage(storage);
+
+        process_request(request, &mut server).await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Error(ServerError::IncorrectData)
+        );
+    }
+
+    #[tokio::test]
+    // Test that the function process_request
+    // returns the correct error when it is
+    // given a request that contains a RESP array
+    // but the content of the array is not
+    // a bulk string.
+    async fn test_process_request_not_bulkstrings() {
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::Array(vec![Resp::simple_string("PING")]),
+            sender: connection_sender,
+        };
+
+        let storage = Storage::new();
+
+        let mut server: Server = Server::new();
+        server.set_storage(storage);
+
+        process_request(request, &mut server).await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Error(ServerError::IncorrectData)
+        );
     }
 }
