@@ -1,19 +1,49 @@
 use crate::resp::Resp;
 use crate::storage_result::{StorageError, StorageResult};
 use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug, PartialEq)]
 pub enum StorageValue {
     String(String),
 }
 
+#[derive(Debug)]
+pub struct StorageData {
+    pub value: StorageValue,
+    pub creation_time: SystemTime,
+    pub expiry: Option<Duration>,
+}
+
+impl StorageData {
+    pub fn add_expiry(&mut self, expiry: Duration) {
+        self.expiry = Some(expiry);
+    }
+}
+
+impl From<String> for StorageData {
+    fn from(s: String) -> Self {
+        Self {
+            value: StorageValue::String(s),
+            creation_time: SystemTime::now(),
+            expiry: None,
+        }
+    }
+}
+
+impl PartialEq for StorageData {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value && self.expiry == other.expiry
+    }
+}
+
 pub struct Storage {
-    store: HashMap<String, StorageValue>,
+    store: HashMap<String, StorageData>,
 }
 
 impl Storage {
     pub fn new() -> Self {
-        let store: HashMap<String, StorageValue> = HashMap::new();
+        let store: HashMap<String, StorageData> = HashMap::new();
 
         Self { store }
     }
@@ -31,7 +61,7 @@ impl Storage {
 
     // Implement the `set` operation for the storage.
     fn set(&mut self, key: String, value: String) -> StorageResult<String> {
-        self.store.insert(key, StorageValue::String(value));
+        self.store.insert(key, StorageData::from(value));
 
         Ok(String::from("OK"))
     }
@@ -39,7 +69,11 @@ impl Storage {
     // Implement the `get` operation for the storage.
     fn get(&self, key: &str) -> StorageResult<Option<String>> {
         match self.store.get(key) {
-            Some(StorageValue::String(v)) => Ok(Some(v.clone())),
+            Some(StorageData {
+                value: StorageValue::String(v),
+                creation_time: _,
+                expiry: _,
+            }) => Ok(Some(v.clone())),
             None => Ok(None),
         }
     }
@@ -115,7 +149,7 @@ mod tests {
     // an element, and the value can be retrieved.
     fn test_set_value() {
         let mut storage: Storage = Storage::new();
-        let avalue = StorageValue::String(String::from("avalue"));
+        let avalue = StorageData::from(String::from("avalue"));
 
         let output = storage
             .set(String::from("akey"), String::from("avalue"))
@@ -138,7 +172,7 @@ mod tests {
         let mut storage: Storage = Storage::new();
         storage.store.insert(
             String::from("akey"),
-            StorageValue::String(String::from("avalue")),
+            StorageData::from(String::from("avalue")),
         );
 
         let result = storage.get("akey").unwrap();
@@ -222,7 +256,7 @@ mod tests {
         let mut storage: Storage = Storage::new();
         storage.store.insert(
             String::from("akey"),
-            StorageValue::String(String::from("avalue")),
+            StorageData::from(String::from("avalue")),
         );
         let command = vec![String::from("get"), String::from("akey")];
 
