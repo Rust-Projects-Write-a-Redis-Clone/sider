@@ -5,6 +5,7 @@ use std::string::FromUtf8Error;
 pub enum RespError {
     FromUtf8,
     OutOfBounds(usize),
+    Unknown,
     WrongType,
 }
 
@@ -13,6 +14,7 @@ impl fmt::Display for RespError {
         match self {
             Self::FromUtf8 => write!(f, "Cannot convert from UTF-8"),
             Self::OutOfBounds(index) => write!(f, "Out of bounds at index {}", index),
+            Self::Unknown => write!(f, "Unknown format for RESP string"),
             Self::WrongType => write!(f, "Wrong prefix for RESP type"),
         }
     }

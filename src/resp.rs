@@ -20,6 +20,9 @@ impl Resp {
     }
 }
 
+// A function that parses a slice of bytes at the given index into a Resp value.
+type RespParser = fn(&[u8], &mut usize) -> RespResult<Resp>;
+
 // Extracts bytes from the buffer until a `\r\n` is reached.
 fn binary_extract_line(buffer: &[u8], index: &mut usize) -> RespResult<Vec<u8>> {
     // The extracted bytes will be stored in this vector.
@@ -118,6 +121,30 @@ fn parse_simple_string(buffer: &[u8], index: &mut usize) -> RespResult<Resp> {
 
     // Add the String to a custom RESP type.
     Ok(Resp::SimpleString(line))
+}
+
+// Select the correct parsing function according to the data type found
+// in the buffer at the given index.
+fn parser_router(buffer: &[u8], index: &usize) -> Option<RespParser> {
+    // Get the character at the current index
+    // and associate it with a parsing function.
+    match buffer[*index] {
+        b'+' => Some(parse_simple_string),
+        _ => None,
+    }
+}
+
+// Parse the bytes of the buffer at the given index and return a RESP data type.
+pub fn bytes_to_resp(buffer: &[u8], index: &mut usize) -> RespResult<Resp> {
+    // Call the selected parsing function and
+    // manage the result.
+    match parser_router(buffer, index) {
+        Some(parse_func) => {
+            let result: Resp = parse_func(buffer, index)?;
+            Ok(result)
+        }
+        None => Err(RespError::Unknown),
+    }
 }
 
 #[cfg(test)]
@@ -303,5 +330,34 @@ mod tests {
 
         assert_eq!(output, Resp::simple_string("OK"));
         assert_eq!(index, 5);
+    }
+
+    #[test]
+    // Test the parsing process end-to-end, checking
+    // that the function bytes_to_resp can parse
+    // a buffer with a RESP simple string.
+    fn test_bytes_to_resp_simple_string() {
+        let buffer = b"+OK\r\n";
+        let mut index: usize = 0;
+
+        let output = bytes_to_resp(buffer, &mut index).unwrap();
+
+        assert_eq!(output, Resp::simple_string("OK"));
+        assert_eq!(index, 5);
+    }
+
+    #[test]
+    // Test the parsing process end-to-end, checking
+    // that the function bytes_to_resp can returns
+    // the correct error when used to parse a
+    // buffer with an unknown data type.
+    fn test_bytes_to_resp_unknown() {
+        let buffer = b"?OK\r\n";
+        let mut index: usize = 0;
+
+        let error = bytes_to_resp(buffer, &mut index).unwrap_err();
+
+        assert_eq!(error, RespError::Unknown);
+        assert_eq!(index, 0);
     }
 }
