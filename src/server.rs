@@ -136,7 +136,7 @@ pub async fn process_request(request: Request, server: &mut Server) {
 
 // The implementation of the handshake process
 // between a replica and the master.
-pub async fn handshake(stream: &mut TcpStream) -> ServerResult {
+pub async fn handshake(stream: &mut TcpStream, info: &ServerInfo) -> ServerResult {
     // Handshake: PING
 
     // Prepare the RESP PING command.
@@ -184,6 +184,59 @@ pub async fn handshake(stream: &mut TcpStream) -> ServerResult {
         return Err(ServerError::HandshakeFailed(format!(
             "Sending {} - Wrong server answer: {}",
             ping, resp
+        )));
+    };
+
+    // Handshake: REPLCONF
+
+    // Prepare the RESP REPLCONF command.
+    let replconf = Resp::bulk_array(vec!["REPLCONF", "listening-port", &info.port.to_string()]);
+
+    // Send the REPLCONF command.
+    stream
+        .write_all(replconf.to_string().as_bytes())
+        .await
+        .map_err(|e| {
+            ServerError::HandshakeFailed(format!(
+                "Sending {} - Cannot write to stream: {}",
+                replconf, e
+            ))
+        })?;
+
+    // Create a buffer to contain the response bytes.
+    let mut buffer = [0; 512];
+
+    // Read the response bytes from the stream.
+    let size = stream.read(&mut buffer).await.map_err(|e| {
+        ServerError::HandshakeFailed(format!(
+            "Sending {} - Cannot read from stream: {}",
+            replconf, e
+        ))
+    })?;
+
+    // Check that the response contains data.
+    if size == 0 {
+        return Err(ServerError::HandshakeFailed(format!(
+            "Sending {} - Connection terminated",
+            replconf
+        )));
+    }
+
+    let mut index: usize = 0;
+
+    // Convert the raw bytes into RESP.
+    let resp = bytes_to_resp(&buffer, &mut index).map_err(|e| {
+        ServerError::HandshakeFailed(format!(
+            "Sending {} - Cannot convert binary to RESP: {}",
+            replconf, e
+        ))
+    })?;
+
+    // Check that the response is correct.
+    if resp != Resp::simple_string("OK") {
+        return Err(ServerError::HandshakeFailed(format!(
+            "Sending {} - Wrong server answer: {}",
+            replconf, resp
         )));
     };
 
