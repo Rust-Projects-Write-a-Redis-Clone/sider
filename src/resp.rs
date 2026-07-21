@@ -3,6 +3,7 @@ use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum Resp {
+    Array(Vec<Self>),
     BulkString(String),
     Null,
     SimpleString(String),
@@ -11,6 +12,13 @@ pub enum Resp {
 impl fmt::Display for Resp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Array(data) => {
+                write!(f, "*{}\r\n", data.len())?;
+                for elem in data.iter() {
+                    write!(f, "{}", elem)?;
+                }
+                Ok(())
+            }
             Self::BulkString(data) => write!(f, "${}\r\n{}\r\n", data.len(), data),
             Self::Null => write!(f, "$-1\r\n"),
             Self::SimpleString(data) => write!(f, "+{}\r\n", data),
@@ -198,6 +206,44 @@ fn parse_bulk_string(buffer: &[u8], index: &mut usize) -> RespResult<Resp> {
     Ok(Resp::BulkString(data))
 }
 
+// Parse an array in the form `*NUM\r\nELEM1\r\nELEM2\r\n...`.
+fn parse_array(buffer: &[u8], index: &mut usize) -> RespResult<Resp> {
+    // Remove the type for an array.
+    resp_remove_type('*', buffer, index)?;
+
+    // Read bytes from the buffer and interpret them
+    // as the number of elements in the array.
+    let length = resp_extract_length(buffer, index)?;
+
+    // If the length is negative there is an error.
+    if length < 0 {
+        return Err(RespError::IncorrectLength(length));
+    }
+
+    // The output vector that will contain the elements
+    // extracted from the array.
+    let mut data = Vec::new();
+
+    // Extract all elements.
+    for _ in 0..length {
+        // Automatically detect the type of element
+        // and parse it.
+        match parser_router(buffer, index) {
+            Some(parse_func) => {
+                // Run the selected parser function
+                // for the current element.
+                let array_element: Resp = parse_func(buffer, index)?;
+
+                // Store the parsed element in the vector.
+                data.push(array_element);
+            }
+            None => return Err(RespError::Unknown),
+        }
+    }
+
+    Ok(Resp::Array(data))
+}
+
 // Select the correct parsing function according to the data type found
 // in the buffer at the given index.
 fn parser_router(buffer: &[u8], index: &usize) -> Option<RespParser> {
@@ -206,6 +252,7 @@ fn parser_router(buffer: &[u8], index: &usize) -> Option<RespParser> {
     match buffer[*index] {
         b'+' => Some(parse_simple_string),
         b'$' => Some(parse_bulk_string),
+        b'*' => Some(parse_array),
         _ => None,
     }
 }
@@ -511,6 +558,39 @@ mod tests {
     }
 
     #[test]
+    // Test that the function parse_array
+    // returns the correct RESP variant when
+    // we read a buffer that contains an
+    // array of two elements, a simple string
+    // and a bulk string.
+    fn test_parse_array() {
+        let buffer = b"*2\r\n+OK\r\n$5\r\nVALUE\r\n";
+        let mut index: usize = 0;
+
+        let output = parse_array(buffer, &mut index).unwrap();
+
+        assert_eq!(
+            output,
+            Resp::Array(vec![Resp::simple_string("OK"), Resp::bulk_string("VALUE")])
+        );
+        assert_eq!(index, 20);
+    }
+
+    #[test]
+    // Test that the function parse_array
+    // returns the correct error when we try to
+    // parse an array with negative length.
+    fn test_parse_array_invalid_length() {
+        let buffer = b"*-1\r\n+OK\r\n$5\r\nVALUE\r\n";
+        let mut index: usize = 0;
+
+        let error = parse_array(buffer, &mut index).unwrap_err();
+
+        assert_eq!(error, RespError::IncorrectLength(-1));
+        assert_eq!(index, 5);
+    }
+
+    #[test]
     // Test the parsing process end-to-end, checking
     // that the function bytes_to_resp can parse
     // a buffer with a RESP simple string.
@@ -551,5 +631,22 @@ mod tests {
 
         assert_eq!(error, RespError::Unknown);
         assert_eq!(index, 0);
+    }
+
+    #[test]
+    // Test the parsing process end-to-end, checking
+    // that the function bytes_to_resp can parse
+    // a buffer with a RESP array.
+    fn test_bytes_to_resp_array() {
+        let buffer = b"*2\r\n+OK\r\n$5\r\nVALUE\r\n";
+        let mut index: usize = 0;
+
+        let output = bytes_to_resp(buffer, &mut index).unwrap();
+
+        assert_eq!(
+            output,
+            Resp::Array(vec![Resp::simple_string("OK"), Resp::bulk_string("VALUE")])
+        );
+        assert_eq!(index, 20);
     }
 }
