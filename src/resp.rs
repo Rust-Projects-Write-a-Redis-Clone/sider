@@ -111,6 +111,28 @@ pub fn resp_remove_type(value: char, buffer: &[u8], index: &mut usize) -> RespRe
     Ok(())
 }
 
+// Extracts a given amount of bytes from the buffer.
+fn binary_extract_bytes(buffer: &[u8], index: &mut usize, length: usize) -> RespResult<Vec<u8>> {
+    // The output vector that will contain the
+    // extracted bytes.
+    let mut output = Vec::new();
+
+    // Check if we are allowed to read
+    // the requested amount of bytes.
+    if *index + length > buffer.len() {
+        return Err(RespError::OutOfBounds(buffer.len()));
+    }
+
+    // Copy the bytes from the buffer into
+    // the output vector.
+    output.extend_from_slice(&buffer[*index..*index + length]);
+
+    // Update the index.
+    *index += length;
+
+    Ok(output)
+}
+
 // Parse a simple string in the form `+VALUE\r\n`.
 fn parse_simple_string(buffer: &[u8], index: &mut usize) -> RespResult<Resp> {
     // Remove the type for a simple string.
@@ -315,6 +337,34 @@ mod tests {
 
         assert_eq!(index, 0);
         assert_eq!(error, RespError::WrongType);
+    }
+
+    #[test]
+    // Test that the function binary_extract_bytes
+    // correctly extracts the requested number of bytes
+    // from a buffer, updating the index.
+    fn test_binary_extract_bytes() {
+        let buffer = b"SOMEBYTES";
+        let mut index: usize = 0;
+
+        let output = binary_extract_bytes(buffer, &mut index, 6).unwrap();
+
+        assert_eq!(output, b"SOMEBY");
+        assert_eq!(index, 6);
+    }
+
+    #[test]
+    // Test that the function binary_extract_bytes
+    // returns the correct error when we try to
+    // read more bytes than are available in the buffer.
+    fn test_binary_extract_bytes_out_of_bounds() {
+        let buffer = b"SOMEBYTES";
+        let mut index: usize = 0;
+
+        let error = binary_extract_bytes(buffer, &mut index, 10).unwrap_err();
+
+        assert_eq!(error, RespError::OutOfBounds(9));
+        assert_eq!(index, 0);
     }
 
     #[test]
