@@ -34,6 +34,14 @@ impl Resp {
     pub fn simple_string(s: impl Into<String>) -> Self {
         Self::SimpleString(s.into())
     }
+
+    pub fn bulk_array<I, T>(items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<String>,
+    {
+        Self::Array(items.into_iter().map(Self::bulk_string).collect())
+    }
 }
 
 // A function that parses a slice of bytes at the given index into a Resp value.
