@@ -1,4 +1,5 @@
-use crate::resp::Resp;
+use crate::resp::{bytes_to_resp, Resp};
+use crate::server::process_request;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -6,6 +7,7 @@ use tokio::{
 
 mod resp;
 mod resp_result;
+mod server;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -40,8 +42,28 @@ async fn handle_connection(mut stream: TcpStream) {
             // If the stream returned some data,
             // process the request.
             Ok(size) if size != 0 => {
-                // Hardcoded response using a specific variant.
-                let response = Resp::simple_string("PONG");
+                // Initialise the index to start at the
+                // beginning of the buffer.
+                let mut index: usize = 0;
+
+                // Process the bytes in the buffer according to
+                // the content and extract the request. Update the index.
+                let request = match bytes_to_resp(&buffer[..size], &mut index) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        return;
+                    }
+                };
+
+                // Process the request.
+                let response = match process_request(request) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("Error parsing command: {}", e);
+                        return;
+                    }
+                };
 
                 // Write the response to the stream.
                 if let Err(e) = stream.write_all(response.to_string().as_bytes()).await {
