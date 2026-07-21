@@ -1,4 +1,5 @@
 use crate::resp::bytes_to_resp;
+use crate::server::handshake;
 use crate::server_result::{ServerMessage, ServerValue};
 use crate::{request::Request, server_result::ServerError};
 use std::fmt;
@@ -70,6 +71,12 @@ pub async fn run_master_listener(
         .await
         .unwrap();
 
+    // Run the handshake protocol
+    if let Err(e) = handshake().await {
+        eprintln!("Handshake failed: {}", e);
+        std::process::exit(1);
+    }
+
     // Spawn a task to take care of this connection.
     tokio::spawn(async move { handle_connection(stream, server_sender).await });
 }
@@ -138,6 +145,7 @@ pub async fn handle_connection(
             Some(response) = connection_receiver.recv() => {
                 let _ = match response {
                     ServerMessage::Data(ServerValue::Resp(v)) => stream.write_all(v.to_string().as_bytes()).await,
+                    ServerMessage::Data(ServerValue::None) => Ok(()),
                     ServerMessage::Error(e) => {
                         eprintln!("Error: {}", ConnectionError::ServerError(e));
                         return;
