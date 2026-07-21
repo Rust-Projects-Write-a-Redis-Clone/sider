@@ -6,6 +6,7 @@ pub enum Resp {
     Array(Vec<Self>),
     BulkString(String),
     Null,
+    RDBPrefix(usize),
     SimpleString(String),
 }
 
@@ -21,6 +22,7 @@ impl fmt::Display for Resp {
             }
             Self::BulkString(data) => write!(f, "${}\r\n{}\r\n", data.len(), data),
             Self::Null => write!(f, "$-1\r\n"),
+            Self::RDBPrefix(data) => write!(f, "${}\r\n", data),
             Self::SimpleString(data) => write!(f, "+{}\r\n", data),
         }
     }
