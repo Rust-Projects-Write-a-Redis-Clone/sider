@@ -59,6 +59,10 @@ impl ReplicationConfig {
             repl_offset: self.repl_offset,
         }
     }
+
+    pub fn is_replica(&self) -> bool {
+        self.master.is_some()
+    }
 }
 
 #[cfg(test)]
