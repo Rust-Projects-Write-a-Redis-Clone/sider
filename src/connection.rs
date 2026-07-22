@@ -4,7 +4,7 @@ use crate::server_result::{ServerMessage, ServerValue};
 use crate::{request::Request, server_result::ServerError};
 use std::fmt;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     select,
     sync::mpsc,
@@ -234,8 +234,8 @@ pub async fn stream_send_receive_resp(
 }
 
 // Read bytes from the stream until the \r\n is reached (including those bytes).
-pub async fn stream_read_line(
-    stream: &mut TcpStream,
+pub async fn stream_read_line<R: AsyncRead + Unpin>(
+    stream: &mut R,
     buffer: &mut [u8],
 ) -> ConnectionResult<usize> {
     let mut byte = [0; 1];
@@ -287,4 +287,24 @@ pub async fn stream_read_data_length(
     }
 
     Ok(index)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    // Test that the function stream_read_line
+    // correctly detects the \r\n, writes the bytes
+    // (terminator included) into the buffer, and
+    // returns the index of the final \n.
+    async fn test_stream_read_line() {
+        let mut stream: &[u8] = b"OK\r\n";
+        let mut buffer = [0u8; 16];
+
+        let index = stream_read_line(&mut stream, &mut buffer).await.unwrap();
+
+        assert_eq!(&buffer[..=index], b"OK\r\n");
+        assert_eq!(index, 3);
+    }
 }
