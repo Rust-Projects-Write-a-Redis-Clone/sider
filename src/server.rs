@@ -98,13 +98,21 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
 
 // Collect replica ACKs and reply to the client
 // as soon as the requested number of replicas
-// has acknowledged.
+// has acknowledged or the timeout has expired.
 pub async fn wait_handler(
+    timeout: u64,
     numreplicas: i64,
     mut wait_handler_receiver: mpsc::Receiver<ServerMessage>,
     client_sender: mpsc::Sender<ServerMessage>,
 ) {
     let mut acks: i64 = 0;
+
+    // `tokio::time::interval` returns an `Interval`, and
+    // the first call to `.tick().await` returns immediately.
+    // So, we need to call it once to actually wait that
+    // amount of time.
+    let mut interval_timer = tokio::time::interval(Duration::from_millis(timeout));
+    interval_timer.tick().await;
 
     loop {
         // When the requested number of replicas
@@ -120,6 +128,15 @@ pub async fn wait_handler(
         tokio::select! {
             Some(_) = wait_handler_receiver.recv() => {
                 acks += 1;
+            }
+
+            // If the timeout has expired, reply with
+            // whatever count we have collected so far.
+            _ = interval_timer.tick() => {
+                let _ = client_sender
+                    .send(ServerMessage::Data(ServerValue::Resp(Resp::Integer(acks))))
+                    .await;
+                break;
             }
         }
     }
