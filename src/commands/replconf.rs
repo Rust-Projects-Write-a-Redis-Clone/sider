@@ -33,7 +33,11 @@ pub async fn command(server: &Server, request: &Request, command: &[String]) {
     }
 
     // Create the response for the server.
-    let resp = Resp::bulk_array(vec!["REPLCONF", "ACK", "0"]);
+    let resp = Resp::bulk_array(vec![
+        "REPLCONF",
+        "ACK",
+        &server.replication.repl_offset.to_string(),
+    ]);
 
     request.data(ServerValue::Resp(resp)).await;
 }
