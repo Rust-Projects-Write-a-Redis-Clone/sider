@@ -356,4 +356,61 @@ mod tests {
             _ => panic!(),
         }
     }
+
+    #[tokio::test]
+    // Make sure the function stream_read_line doesn't
+    // have any hardcoded values testing a different
+    // use case.
+    async fn test_stream_read_line_longer_string() {
+        let mut stream: &[u8] = b"ECHO\r\n";
+        let mut buffer = [0u8; 16];
+
+        let index = stream_read_line(&mut stream, &mut buffer).await.unwrap();
+
+        assert_eq!(&buffer[..=index], b"ECHO\r\n");
+        assert_eq!(index, 5);
+    }
+
+    #[tokio::test]
+    // Test that the function stream_read_line returns
+    // a CannotReadFromStream error when the stream is
+    // empty and no bytes can be read at all.
+    async fn test_stream_read_line_empty_stream() {
+        let mut stream: &[u8] = b"";
+        let mut buffer = [0u8; 16];
+
+        match stream_read_line(&mut stream, &mut buffer).await {
+            Err(ConnectionError::CannotReadFromStream(_)) => {}
+            _ => panic!(),
+        }
+    }
+
+    #[tokio::test]
+    // Test that the function stream_read_line returns
+    // a CannotReadFromStream error when the stream
+    // ends before the terminator \r\n is reached.
+    async fn test_stream_read_line_no_separator() {
+        let mut stream: &[u8] = b"OK";
+        let mut buffer = [0u8; 16];
+
+        match stream_read_line(&mut stream, &mut buffer).await {
+            Err(ConnectionError::CannotReadFromStream(_)) => {}
+            _ => panic!(),
+        }
+    }
+
+    #[tokio::test]
+    // Test that the function stream_read_line returns
+    // a CannotReadFromStream error when the stream
+    // sends only \r and then ends, leaving the
+    // terminator \r\n incomplete.
+    async fn test_stream_read_line_half_separator() {
+        let mut stream: &[u8] = b"OK\r";
+        let mut buffer = [0u8; 16];
+
+        match stream_read_line(&mut stream, &mut buffer).await {
+            Err(ConnectionError::CannotReadFromStream(_)) => {}
+            _ => panic!(),
+        }
+    }
 }
