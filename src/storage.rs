@@ -109,7 +109,7 @@ impl Storage {
     }
 
     // Implement the `get` operation for the storage.
-    pub fn get(&mut self, key: &str) -> StorageResult<Option<String>> {
+    pub fn get(&mut self, key: &str) -> StorageResult<Option<StorageValue>> {
         if let Some(&expiry) = self.expiry.get(key) {
             if SystemTime::now() >= expiry {
                 self.expiry.remove(key);
@@ -123,7 +123,7 @@ impl Storage {
                 value: StorageValue::String(v),
                 creation_time: _,
                 expiry: _,
-            }) => Ok(Some(v.clone())),
+            }) => Ok(Some(StorageValue::String(v.clone()))),
             None => Ok(None),
         }
     }
@@ -214,7 +214,7 @@ mod tests {
         let result = storage.get("akey").unwrap();
 
         assert_eq!(storage.store.len(), 1);
-        assert_eq!(result, Some(String::from("avalue")));
+        assert_eq!(result, Some(StorageValue::String(String::from("avalue"))));
     }
 
     #[test]

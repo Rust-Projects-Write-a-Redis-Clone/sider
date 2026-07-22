@@ -2,6 +2,7 @@ use crate::request::Request;
 use crate::resp::Resp;
 use crate::server::Server;
 use crate::server_result::{ServerError, ServerValue};
+use crate::storage::StorageValue;
 
 pub async fn command(server: &mut Server, request: &Request, command: &[String]) {
     // Extract the storage from the server.
@@ -23,7 +24,9 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     let output = storage.get(&command[1]);
 
     match output {
-        Ok(Some(v)) => request.data(ServerValue::Resp(Resp::BulkString(v))).await,
+        Ok(Some(StorageValue::String(v))) => {
+            request.data(ServerValue::Resp(Resp::BulkString(v))).await
+        }
         Ok(None) => request.data(ServerValue::Resp(Resp::Null)).await,
         Err(_) => {
             request
