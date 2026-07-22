@@ -21,12 +21,26 @@ impl StorageData {
     pub fn add_expiry(&mut self, expiry: Duration) {
         self.expiry = Some(expiry);
     }
+
+    pub fn string(s: impl Into<String>) -> Self {
+        Self::from(StorageValue::String(s.into()))
+    }
+
+    pub fn list<I, T>(items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<String>,
+    {
+        Self::from(StorageValue::List(
+            items.into_iter().map(Into::into).collect(),
+        ))
+    }
 }
 
-impl From<String> for StorageData {
-    fn from(s: String) -> Self {
+impl From<StorageValue> for StorageData {
+    fn from(value: StorageValue) -> Self {
         Self {
-            value: StorageValue::String(s),
+            value,
             creation_time: SystemTime::now(),
             expiry: None,
         }
@@ -91,7 +105,7 @@ impl Storage {
 
     // Implement the `set` operation for the storage.
     pub fn set(&mut self, key: String, value: String, args: SetArgs) -> StorageResult<String> {
-        let mut data = StorageData::from(value);
+        let mut data = StorageData::string(value);
 
         if let Some(value) = args.expiry {
             let expiry = match value {
@@ -153,7 +167,7 @@ mod tests {
     // an element, and the value can be retrieved.
     fn test_set_value() {
         let mut storage: Storage = Storage::new();
-        let avalue = StorageData::from(String::from("avalue"));
+        let avalue = StorageData::string("avalue");
 
         let output = storage
             .set(String::from("akey"), String::from("avalue"), SetArgs::new())
@@ -175,7 +189,7 @@ mod tests {
     // parameters.
     fn test_set_value_with_px() {
         let mut storage: Storage = Storage::new();
-        let mut avalue = StorageData::from(String::from("avalue"));
+        let mut avalue = StorageData::string("avalue");
         avalue.add_expiry(Duration::from_millis(100));
 
         let output = storage
@@ -207,10 +221,9 @@ mod tests {
     // from the storage.
     fn test_get_value() {
         let mut storage: Storage = Storage::new();
-        storage.store.insert(
-            String::from("akey"),
-            StorageData::from(String::from("avalue")),
-        );
+        storage
+            .store
+            .insert(String::from("akey"), StorageData::string("avalue"));
 
         let result = storage.get("akey").unwrap();
 
