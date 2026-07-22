@@ -28,7 +28,7 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
             request.data(ServerValue::Resp(Resp::BulkString(v))).await
         }
         Ok(None) => request.data(ServerValue::Resp(Resp::Null)).await,
-        Err(_) => {
+        _ => {
             request
                 .error(ServerError::CommandInternalError(command.join(" ")))
                 .await
