@@ -52,6 +52,7 @@ pub type ServerResult = Result<ServerValue, ServerError>;
 
 #[derive(Debug, PartialEq)]
 pub enum ServerMessage {
+    ClientInit(u64),
     Data(ServerValue),
     Error(ServerError),
 }
