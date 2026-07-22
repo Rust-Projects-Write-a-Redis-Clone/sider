@@ -3,6 +3,7 @@ use crate::resp::Resp;
 use crate::server::Server;
 use crate::server_result::{ServerError, ServerValue};
 use crate::set::SetArgs;
+use crate::storage::StorageValue;
 
 pub async fn command(server: &mut Server, request: &Request, command: &[String]) {
     // Extract the storage from the server.
@@ -37,7 +38,10 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
         // stored, and sent back to the user.
         Ok(storage_value) => {
             // Convert None into a "0".
-            let storage_value = storage_value.unwrap_or_else(|| String::from("0"));
+            let storage_value = match storage_value {
+                Some(StorageValue::String(s)) => s,
+                None => String::from("0"),
+            };
 
             // Parse the storage value into an i64.
             match storage_value.parse::<i64>() {
@@ -164,7 +168,7 @@ mod tests {
 
         assert_eq!(
             server.storage.as_mut().unwrap().get("key").unwrap(),
-            Some("43".to_string())
+            Some(StorageValue::String(String::from("43")))
         );
     }
 
