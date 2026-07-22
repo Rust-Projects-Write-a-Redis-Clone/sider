@@ -344,6 +344,7 @@ mod tests {
             value: Resp::bulk_array(vec!["PING"]),
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         let storage = Storage::new();
@@ -370,6 +371,7 @@ mod tests {
             value: Resp::bulk_array(vec!["ECHO", "42"]),
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         let storage = Storage::new();
@@ -397,6 +399,7 @@ mod tests {
             value: Resp::bulk_string("PING"),
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         let storage = Storage::new();
@@ -425,6 +428,7 @@ mod tests {
             value: Resp::Array(vec![Resp::simple_string("PING")]),
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         let storage = Storage::new();

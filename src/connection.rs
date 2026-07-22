@@ -70,7 +70,8 @@ pub async fn run_listener(host: String, port: u16, server_sender: mpsc::Sender<C
                     // The connection is valid, handle it.
                     Ok((stream, _)) => {
                         // Spawn a task to take care of this connection.
-                        tokio::spawn(handle_connection(stream, server_sender.clone()));
+                        // Mark the connection as coming from a client.
+                        tokio::spawn(handle_connection(stream, server_sender.clone(), false));
                     }
                     Err(e) => {
                         eprintln!("Error: {}", e);
@@ -101,13 +102,15 @@ pub async fn run_master_listener(
     }
 
     // Spawn a task to take care of this connection.
-    tokio::spawn(async move { handle_connection(stream, server_sender).await });
+    // Mark the connection as coming from the master.
+    tokio::spawn(async move { handle_connection(stream, server_sender, true).await });
 }
 
 // The main entry point for valid TCP connections.
 pub async fn handle_connection(
     mut stream: TcpStream,
     server_sender: mpsc::Sender<ConnectionMessage>,
+    master_connection: bool,
 ) {
     // Create a buffer to host incoming data.
     let mut buffer = [0; 512];
@@ -149,6 +152,7 @@ pub async fn handle_connection(
                                 value: resp,
                                 sender: connection_sender.clone(),
                                 binary: buffer[start..index].to_vec(),
+                                master_connection,
                             };
 
                             // Send the request to the server.

@@ -59,6 +59,7 @@ mod tests {
             value: Resp::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&mut server, &request, &cmd).await;
@@ -81,6 +82,7 @@ mod tests {
             value: Resp::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&mut server, &request, &cmd).await;
@@ -105,6 +107,7 @@ mod tests {
             value: Resp::Null,
             sender: connection_sender,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&mut server, &request, &cmd).await;

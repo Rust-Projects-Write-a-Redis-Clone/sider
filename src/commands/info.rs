@@ -46,6 +46,7 @@ mod tests {
             value: Resp::Null,
             sender: request_channel_tx,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&server, &request, &cmd).await;
@@ -76,6 +77,7 @@ mod tests {
             value: Resp::Null,
             sender: request_channel_tx,
             binary: Vec::new(),
+            master_connection: false,
         };
 
         command(&server, &request, &cmd).await;
