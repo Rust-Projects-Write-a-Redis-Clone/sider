@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 pub struct Request {
     pub value: Resp,
     pub sender: mpsc::Sender<ServerMessage>,
+    pub binary: Vec<u8>,
 }
 
 impl Request {

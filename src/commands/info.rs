@@ -45,6 +45,7 @@ mod tests {
         let request = Request {
             value: Resp::Null,
             sender: request_channel_tx,
+            binary: Vec::new(),
         };
 
         command(&server, &request, &cmd).await;
@@ -74,6 +75,7 @@ mod tests {
         let request = Request {
             value: Resp::Null,
             sender: request_channel_tx,
+            binary: Vec::new(),
         };
 
         command(&server, &request, &cmd).await;
