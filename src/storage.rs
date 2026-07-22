@@ -1,5 +1,5 @@
 use crate::set::{KeyExpiry, SetArgs};
-use crate::storage_result::StorageResult;
+use crate::storage_result::{StorageError, StorageResult};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Duration, SystemTime};
@@ -142,6 +142,43 @@ impl Storage {
             _ => Ok(None),
         }
     }
+
+    // Implement the `rpush` operation for the storage.
+    pub fn rpush(&mut self, key: &str, value: String) -> StorageResult<usize> {
+        // Get a mutable reference to the value
+        // of the key and act according to its
+        // nature.
+        let length = match self.store.get_mut(key) {
+            // The value is a string, we cannot
+            // use rpush on it.
+            Some(StorageData {
+                value: StorageValue::String(_),
+                ..
+            }) => return Err(StorageError::WrongType),
+
+            // The value is already a list. Add
+            // the new element and return the
+            // length.
+            Some(StorageData {
+                value: StorageValue::List(v),
+                ..
+            }) => {
+                v.push(value);
+                v.len()
+            }
+
+            // The key doesn't exist. Create it as
+            // a list of a single element and
+            // return the length of 1.
+            None => {
+                self.store
+                    .insert(key.to_string(), StorageData::list([value]));
+                1
+            }
+        };
+
+        Ok(length)
+    }
 }
 
 #[cfg(test)]
@@ -282,5 +319,63 @@ mod tests {
 
         storage.expire_keys();
         assert_eq!(storage.store.len(), 1);
+    }
+
+    #[test]
+    // Test that the function rpush works as expected
+    // when the key doesn't exist.
+    // The key is created as a list and the value is
+    // added to it.
+    fn test_rpush_key_does_not_exist() {
+        let mut storage: Storage = Storage::new();
+        let avalue = StorageData::list(["avalue"]);
+
+        let output = storage.rpush("akey", String::from("avalue")).unwrap();
+
+        assert_eq!(output, 1);
+        assert_eq!(storage.store.len(), 1);
+        match storage.store.get("akey") {
+            Some(value) => assert_eq!(value, &avalue),
+            None => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function rpush works as expected
+    // when the key exists and is a list.
+    // The value is added to it.
+    fn test_rpush_key_exists_and_is_list() {
+        let mut storage: Storage = Storage::new();
+
+        storage
+            .store
+            .insert(String::from("akey"), StorageData::list(["value1"]));
+
+        let list = StorageData::list(["value1", "value2"]);
+
+        let output = storage.rpush("akey", String::from("value2")).unwrap();
+
+        assert_eq!(output, 2);
+        assert_eq!(storage.store.len(), 1);
+        match storage.store.get("akey") {
+            Some(value) => assert_eq!(value, &list),
+            None => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function rpush
+    // returns the correct error when
+    // the key exists and is not a list.
+    fn test_rpush_key_exists_and_is_not_list() {
+        let mut storage: Storage = Storage::new();
+
+        storage
+            .store
+            .insert(String::from("akey"), StorageData::string("avalue"));
+
+        let error = storage.rpush("akey", String::from("value2"));
+
+        assert_eq!(error, Err(StorageError::WrongType));
     }
 }

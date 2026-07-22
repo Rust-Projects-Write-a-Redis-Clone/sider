@@ -8,5 +8,6 @@ pub mod multi;
 pub mod ping;
 pub mod psync;
 pub mod replconf;
+pub mod rpush;
 pub mod set;
 pub mod wait;
