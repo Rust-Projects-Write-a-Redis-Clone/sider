@@ -1,13 +1,29 @@
 use crate::request::Request;
 use crate::resp::Resp;
 use crate::server::Server;
-use crate::server_result::{ServerError, ServerValue};
+use crate::server_result::{ServerError, ServerMessage, ServerValue};
 
 pub async fn command(server: &Server, request: &Request, command: &[String]) {
-    // On a master, the REPLCONF is received only
-    // from the handshake process. In that case we
-    // always reply with OK.
+    // On a master, the REPLCONF is received either
+    // from the handshake process (in which case we
+    // reply with OK) or as a `REPLCONF ACK <offset>`
+    // sent by a replica in response to a GETACK we
+    // previously issued.
     if !server.replication.is_replica() {
+        // A replica is reporting its offset in
+        // response to a GETACK. Send an empty
+        // message to the wait handler and stay
+        // silent on the replica's own channel.
+        if command.len() >= 2 && command[1].to_uppercase() == "ACK" {
+            if let Some(tx) = &server.wait_handler_sender {
+                // The wait handler might have already
+                // dropped its receiver.
+                // Ignore the send error.
+                let _ = tx.send(ServerMessage::Data(ServerValue::None)).await;
+            }
+            return;
+        }
+
         request
             .data(ServerValue::Resp(Resp::simple_string("OK")))
             .await;
@@ -244,5 +260,75 @@ mod tests {
                 "replconf something *"
             )))
         )
+    }
+
+    #[tokio::test]
+    // Test that a master receiving `REPLCONF ACK`
+    // sends an empty message to the wait handler
+    // and sends nothing back on the replica's own
+    // channel.
+    async fn test_command_replconf_ack_on_master_forwards_to_wait_handler() {
+        let cmd = vec![
+            String::from("replconf"),
+            String::from("ACK"),
+            String::from("42"),
+        ];
+
+        let mut server = Server::new("localhost".to_string(), 6379);
+
+        // Install a wait handler sender so the
+        // master has somewhere to forward the ACK.
+        let (wait_tx, mut wait_rx) = mpsc::channel::<ServerMessage>(32);
+        server.wait_handler_sender = Some(wait_tx);
+
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::Null,
+            sender: connection_sender,
+            binary: Vec::new(),
+            master_connection: false,
+        };
+
+        command(&server, &request, &cmd).await;
+
+        assert_eq!(
+            wait_rx.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::None)
+        );
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap_err(),
+            mpsc::error::TryRecvError::Empty
+        );
+    }
+
+    #[tokio::test]
+    // Test that a master receiving `REPLCONF ACK`
+    // while no wait handler is listening simply
+    // drops the ACK without replying.
+    async fn test_command_replconf_ack_on_master_no_wait_handler() {
+        let cmd = vec![
+            String::from("replconf"),
+            String::from("ACK"),
+            String::from("42"),
+        ];
+
+        let server = Server::new("localhost".to_string(), 6379);
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::Null,
+            sender: connection_sender,
+            binary: Vec::new(),
+            master_connection: false,
+        };
+
+        command(&server, &request, &cmd).await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap_err(),
+            mpsc::error::TryRecvError::Empty
+        );
     }
 }
