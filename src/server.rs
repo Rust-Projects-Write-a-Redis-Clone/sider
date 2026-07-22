@@ -208,8 +208,31 @@ pub async fn process_request(request: Request, server: &mut Server) {
         }
     }
 
+    // Look up the client associated with this request.
+    let client = match server.clients.get_mut(&request.client_id) {
+        Some(client) => client,
+        None => {
+            request
+                .error(ServerError::CommandInternalError(String::from(
+                    "Cannot find client ID",
+                )))
+                .await;
+            return;
+        }
+    };
+
     // Extract the command name to route the request.
     let command_name = command[0].to_lowercase();
+
+    // If the client is in multi mode and the command
+    // is not EXEC, queue the request and reply QUEUED.
+    if client.multi && command_name != "exec" {
+        request
+            .data(ServerValue::Resp(Resp::simple_string("QUEUED")))
+            .await;
+        client.requests.push(request);
+        return;
+    }
 
     // Process the request using the requested command.
     match command_name.as_str() {
@@ -445,6 +468,9 @@ mod tests {
         let mut server: Server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
+        let client = Client::new(1);
+        server.clients.insert(1, client);
+
         process_request(request, &mut server).await;
 
         assert_eq!(
@@ -472,6 +498,9 @@ mod tests {
 
         let mut server: Server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
+
+        let client = Client::new(1);
+        server.clients.insert(1, client);
 
         process_request(request, &mut server).await;
 
