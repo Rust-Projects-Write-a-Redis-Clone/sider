@@ -58,6 +58,7 @@ mod tests {
         let request = Request {
             value: Resp::Null,
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         command(&mut server, &request, &cmd).await;
@@ -79,6 +80,7 @@ mod tests {
         let request = Request {
             value: Resp::Null,
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         command(&mut server, &request, &cmd).await;
@@ -102,6 +104,7 @@ mod tests {
         let request = Request {
             value: Resp::Null,
             sender: connection_sender,
+            binary: Vec::new(),
         };
 
         command(&mut server, &request, &cmd).await;

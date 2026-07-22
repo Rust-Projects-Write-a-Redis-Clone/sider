@@ -139,6 +139,7 @@ pub async fn handle_connection(
                         let request = Request {
                             value: resp,
                             sender: connection_sender.clone(),
+                            binary: buffer[..size].to_vec(),
                         };
 
                         // Send the request to the server.
