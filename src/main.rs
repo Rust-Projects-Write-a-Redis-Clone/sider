@@ -89,6 +89,13 @@ async fn main() -> std::io::Result<()> {
     // Create the MPSC channel to communicate with the server.
     let (server_sender, server_receiver) = mpsc::channel::<ConnectionMessage>(32);
 
+    // Store the server sender in the server itself.
+    // This allows the server to spawn functions
+    // that send requests back to itself (e.g. EXEC).
+    server.self_sender = Some(server_sender.clone());
+
+    // If this server is a replica,
+    // connect to the master and listen.
     if let Some(master_config) = &server.replication.master {
         run_master_listener(
             master_config.host.clone(),
