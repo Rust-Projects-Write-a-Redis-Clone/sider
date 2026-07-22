@@ -253,3 +253,29 @@ pub async fn stream_read_line(
 
     Ok(index)
 }
+
+// Read the given amount of bytes from the stream
+pub async fn stream_read_data_length(
+    stream: &mut TcpStream,
+    buffer: &mut [u8],
+    length: usize,
+) -> ConnectionResult<usize> {
+    let mut byte = [0; 1];
+    let mut index = 0;
+
+    // Keep reading every byte until we reach the given amount.
+    while index < length {
+        // Read one byte.
+        stream
+            .read_exact(&mut byte)
+            .await
+            .map_err(|e| ConnectionError::CannotReadFromStream(e.to_string()))?;
+
+        // Store the byte in the buffer.
+        buffer[index] = byte[0];
+
+        index += 1;
+    }
+
+    Ok(index)
+}
