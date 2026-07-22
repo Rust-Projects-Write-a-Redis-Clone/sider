@@ -91,6 +91,17 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
     }
 }
 
+// Forward the given request to all replicas known to the server.
+pub async fn send_request_to_replicas(request: &Request, server: &Server) {
+    for replica_sender in server.replica_senders.iter() {
+        let _ = replica_sender
+            .send(ServerMessage::Data(ServerValue::Binary(
+                request.binary.clone(),
+            )))
+            .await;
+    }
+}
+
 // Process an incoming request and return a result.
 pub async fn process_request(request: Request, server: &mut Server) {
     // Check if the request is expressed using
@@ -144,6 +155,9 @@ pub async fn process_request(request: Request, server: &mut Server) {
         }
         "set" => {
             set::command(server, &request, &command).await;
+
+            // Forward the request to all replicas.
+            send_request_to_replicas(&request, server).await;
         }
         _ => {
             request
