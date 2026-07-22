@@ -14,16 +14,16 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     };
 
     // Check that the command received a key and a value.
-    if command.len() != 3 {
+    if command.len() < 3 {
         request
             .error(ServerError::CommandSyntaxError(command.join(" ")))
             .await;
         return;
     }
 
-    // Extract the key and the value.
+    // Extract the key and the values.
     let key = &command[1];
-    let value = command[2].clone();
+    let value = &command[2..];
 
     let result = storage.rpush(key, value);
 
@@ -73,6 +73,40 @@ mod tests {
         assert_eq!(
             request_channel_rx.try_recv().unwrap(),
             ServerMessage::Data(ServerValue::Resp(Resp::Integer(1)))
+        );
+    }
+
+    #[tokio::test]
+    // Test that the function command processes
+    // a `RPUSH` request with multiple values
+    // to an existing key which is already a list.
+    async fn test_command_multiple_values() {
+        let storage = Storage::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let cmd = vec![
+            String::from("rpush"),
+            String::from("key"),
+            String::from("value0"),
+            String::from("value1"),
+        ];
+
+        let (request_channel_tx, mut request_channel_rx) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::Null,
+            sender: request_channel_tx.clone(),
+            binary: Vec::new(),
+            client_id: 1,
+            master_connection: false,
+        };
+
+        command(&mut server, &request, &cmd).await;
+
+        assert_eq!(
+            request_channel_rx.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::Integer(2)))
         );
     }
 
