@@ -342,9 +342,33 @@ mod tests {
 
     #[test]
     // Test that the function rpush works as expected
-    // when the key exists and is a list.
+    // when the key exists and is an empty list.
     // The value is added to it.
-    fn test_rpush_key_exists_and_is_list() {
+    fn test_rpush_key_exists_and_is_list_empty() {
+        let mut storage: Storage = Storage::new();
+
+        storage.store.insert(
+            String::from("akey"),
+            StorageData::list(Vec::<String>::new()),
+        );
+
+        let list = StorageData::list(["value1"]);
+
+        let output = storage.rpush("akey", String::from("value1")).unwrap();
+
+        assert_eq!(output, 1);
+        assert_eq!(storage.store.len(), 1);
+        match storage.store.get("akey") {
+            Some(value) => assert_eq!(value, &list),
+            None => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function rpush works as expected
+    // when the key exists and is a non-empty list.
+    // The value is added to it.
+    fn test_rpush_key_exists_and_is_list_not_empty() {
         let mut storage: Storage = Storage::new();
 
         storage
