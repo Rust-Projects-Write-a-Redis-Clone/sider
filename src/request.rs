@@ -1,6 +1,6 @@
 use crate::{
     resp::Resp,
-    server_result::{ServerError, ServerMessage, ServerValue},
+    server_result::{ServerError, ServerMessage, ServerResult, ServerValue},
 };
 use tokio::sync::mpsc;
 
@@ -28,5 +28,9 @@ impl Request {
 
     pub async fn data(&self, d: ServerValue) {
         let _ = self.sender.send(ServerMessage::Data(d)).await;
+    }
+
+    pub async fn result(&self, r: ServerResult) {
+        let _ = self.sender.send(ServerMessage::from(r)).await;
     }
 }
