@@ -29,44 +29,44 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     // Find the value of the key.
     let output = storage.get(key);
 
-    // Check the value of the key.
-    let result = match output {
-        // The key exists but the value might be None.
-        // If it is None, we act as if the key
-        // was correctly read and has value "0",
-        // which will then be incremented to 1,
-        // stored, and sent back to the user.
-        Ok(storage_value) => {
-            // Convert None into a "0".
-            let storage_value = match storage_value {
-                Some(StorageValue::String(s)) => s,
-                None => String::from("0"),
-            };
+    // Resolve the stored string. The key might exist or not,
+    // and if it exists it might not be a StorageValue::String.
+    let string_value = match output {
+        // The key exists and holds a string.
+        Ok(Some(StorageValue::String(s))) => s,
 
-            // Parse the storage value into an i64.
-            match storage_value.parse::<i64>() {
-                // The value was successfully parsed.
-                Ok(n) => {
-                    // Increment the value.
-                    let value = n + 1;
+        // The key doesn't exist. Pretend it is "0".
+        Ok(None) => String::from("0"),
 
-                    // Try to store the incremented value.
-                    match storage.set(key.clone(), value.to_string(), SetArgs::new()) {
-                        // Incremented value successfully stored,
-                        // send it back to the client.
-                        Ok(_) => Ok(ServerValue::Resp(Resp::Integer(value))),
-                        // An error occurred.
-                        Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
-                    }
-                }
-                // The value is not an integer.
-                Err(_) => Ok(ServerValue::Resp(Resp::simple_error(
-                    "ERR value is not an integer or out of range",
-                ))),
+        // The key exists but isn't a string, or reading it failed.
+        Ok(Some(_)) | Err(_) => {
+            request
+                .error(ServerError::CommandInternalError(command.join(" ")))
+                .await;
+            return;
+        }
+    };
+
+    // Parse the string value into an i64.
+    let result = match string_value.parse::<i64>() {
+        // The conversion succeeded.
+        Ok(n) => {
+            // Increment the value.
+            let value = n + 1;
+
+            // Try to store the incremented value.
+            match storage.set(key.clone(), value.to_string(), SetArgs::new()) {
+                // Incremented value successfully stored,
+                // send it back to the client.
+                Ok(_) => Ok(ServerValue::Resp(Resp::Integer(value))),
+                // An error occurred.
+                Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
             }
         }
-        // An error occurred while reading the key.
-        Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
+        // The value is not an integer.
+        Err(_) => Ok(ServerValue::Resp(Resp::simple_error(
+            "ERR value is not an integer or out of range",
+        ))),
     };
 
     request.result(result).await;

@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime};
 #[derive(Debug, PartialEq)]
 pub enum StorageValue {
     String(String),
+    List(Vec<String>),
 }
 
 #[derive(Debug)]
@@ -124,7 +125,7 @@ impl Storage {
                 creation_time: _,
                 expiry: _,
             }) => Ok(Some(StorageValue::String(v.clone()))),
-            None => Ok(None),
+            _ => Ok(None),
         }
     }
 }
