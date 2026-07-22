@@ -119,6 +119,25 @@ pub async fn handle_connection(
     // Create the MPSC channel to communicate with the connection.
     let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
+    // Tell the server that a new client has connected.
+    if let Err(e) = server_sender
+        .send(ConnectionMessage::NewClient(connection_sender.clone()))
+        .await
+    {
+        eprintln!("Error sending request: {}", e);
+        return;
+    }
+
+    // This is the unique client ID that the
+    // connection handler receives from the server.
+    let _client_id: u64 = match connection_receiver.recv().await {
+        Some(ServerMessage::ClientInit(id)) => id,
+        _ => {
+            eprintln!("Error initialising client");
+            return;
+        }
+    };
+
     loop {
         select! {
             // Data is available in the stream, read it.
@@ -182,6 +201,12 @@ pub async fn handle_connection(
             // A response arrived from the server.
             Some(response) = connection_receiver.recv() => {
                 let _ = match response {
+                    // We shouldn't receive this
+                    // message again from the server.
+                    ServerMessage::ClientInit(_) => {
+                        eprintln!("ClientInit received twice");
+                        return;
+                    },
                     ServerMessage::Data(ServerValue::Resp(v)) => stream.write_all(v.to_string().as_bytes()).await,
                     ServerMessage::Data(ServerValue::None) => Ok(()),
                     ServerMessage::Data(ServerValue::Binary(data)) => stream.write_all(&data).await,
