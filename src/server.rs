@@ -1,4 +1,4 @@
-use crate::commands::{echo, get, info, ping, psync, replconf, set};
+use crate::commands::{echo, get, info, ping, psync, replconf, set, wait};
 use crate::connection::{
     stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
 };
@@ -161,6 +161,9 @@ pub async fn process_request(request: Request, server: &mut Server) {
 
             // Forward the request to all replicas.
             send_request_to_replicas(&request, server).await;
+        }
+        "wait" => {
+            wait::command(server, &request, &command).await;
         }
         _ => {
             request
