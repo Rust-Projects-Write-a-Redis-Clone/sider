@@ -144,7 +144,7 @@ impl Storage {
     }
 
     // Implement the `rpush` operation for the storage.
-    pub fn rpush(&mut self, key: &str, value: String) -> StorageResult<usize> {
+    pub fn rpush(&mut self, key: &str, values: &[String]) -> StorageResult<usize> {
         // Get a mutable reference to the value
         // of the key and act according to its
         // nature.
@@ -158,22 +158,24 @@ impl Storage {
 
             // The value is already a list. Add
             // the new element and return the
-            // length.
+            // length of the whole list.
             Some(StorageData {
                 value: StorageValue::List(v),
                 ..
             }) => {
-                v.push(value);
+                // Create an iterator of &String and own each
+                // element cloning it into a String.
+                v.extend(values.iter().cloned());
                 v.len()
             }
 
             // The key doesn't exist. Create it as
             // a list of a single element and
-            // return the length of 1.
+            // return its length.
             None => {
                 self.store
-                    .insert(key.to_string(), StorageData::list([value]));
-                1
+                    .insert(key.to_string(), StorageData::list(values.to_vec()));
+                values.len()
             }
         };
 
@@ -330,7 +332,7 @@ mod tests {
         let mut storage: Storage = Storage::new();
         let avalue = StorageData::list(["avalue"]);
 
-        let output = storage.rpush("akey", String::from("avalue")).unwrap();
+        let output = storage.rpush("akey", &[String::from("avalue")]).unwrap();
 
         assert_eq!(output, 1);
         assert_eq!(storage.store.len(), 1);
@@ -354,7 +356,7 @@ mod tests {
 
         let list = StorageData::list(["value1"]);
 
-        let output = storage.rpush("akey", String::from("value1")).unwrap();
+        let output = storage.rpush("akey", &[String::from("value1")]).unwrap();
 
         assert_eq!(output, 1);
         assert_eq!(storage.store.len(), 1);
@@ -377,9 +379,34 @@ mod tests {
 
         let list = StorageData::list(["value1", "value2"]);
 
-        let output = storage.rpush("akey", String::from("value2")).unwrap();
+        let output = storage.rpush("akey", &[String::from("value2")]).unwrap();
 
         assert_eq!(output, 2);
+        assert_eq!(storage.store.len(), 1);
+        match storage.store.get("akey") {
+            Some(value) => assert_eq!(value, &list),
+            None => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function rpush works as expected
+    // when the key exists and multiple values are
+    // pushed.
+    fn test_rpush_multiple_elements() {
+        let mut storage: Storage = Storage::new();
+
+        storage
+            .store
+            .insert(String::from("akey"), StorageData::list(["value1"]));
+
+        let list = StorageData::list(["value1", "value2", "value3"]);
+
+        let output = storage
+            .rpush("akey", &[String::from("value2"), String::from("value3")])
+            .unwrap();
+
+        assert_eq!(output, 3);
         assert_eq!(storage.store.len(), 1);
         match storage.store.get("akey") {
             Some(value) => assert_eq!(value, &list),
@@ -398,7 +425,7 @@ mod tests {
             .store
             .insert(String::from("akey"), StorageData::string("avalue"));
 
-        let error = storage.rpush("akey", String::from("value2"));
+        let error = storage.rpush("akey", &[String::from("value2")]);
 
         assert_eq!(error, Err(StorageError::WrongType));
     }
