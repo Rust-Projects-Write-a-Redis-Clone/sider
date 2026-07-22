@@ -1,3 +1,4 @@
+use crate::client::Client;
 use crate::commands::{echo, exec, get, incr, info, multi, ping, psync, replconf, set, wait};
 use crate::connection::{
     stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
@@ -8,6 +9,7 @@ use crate::resp::{bytes_to_resp, resp_extract_length, resp_remove_type};
 use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::Resp;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -26,6 +28,7 @@ pub struct Server {
     pub replica_senders: Vec<mpsc::Sender<ServerMessage>>,
     pub wait_handler_sender: Option<mpsc::Sender<ServerMessage>>,
     pub next_client_id: AtomicU64,
+    pub clients: HashMap<u64, Client>,
 }
 
 impl Server {
@@ -37,6 +40,7 @@ impl Server {
             replica_senders: Vec::new(),
             wait_handler_sender: None,
             next_client_id: AtomicU64::new(1),
+            clients: HashMap::new(),
         }
     }
 
@@ -90,6 +94,12 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
                         // Get the current ID and atomically
                         // increase it.
                         let client_id = server.next_client_id.fetch_add(1, Ordering::Relaxed);
+
+                        // Create the client.
+                        let client = Client::new(client_id);
+
+                        // Add the client to the global register.
+                        server.clients.insert(client_id, client);
 
                         // Send the client ID to the Connection Handler.
                         if sender.send(ServerMessage::ClientInit(client_id)).await.is_err() {
