@@ -3,9 +3,13 @@ use crate::resp::Resp;
 use crate::server::Server;
 use crate::server_result::ServerValue;
 
-pub async fn command(_server: &Server, request: &Request, _command: &[String]) {
-    // At this stage WAIT always reports zero replicas.
-    request.data(ServerValue::Resp(Resp::Integer(0))).await;
+pub async fn command(server: &Server, request: &Request, _command: &[String]) {
+    // Report how many replicas are currently connected.
+    request
+        .data(ServerValue::Resp(Resp::Integer(
+            server.replica_senders.len() as i64,
+        )))
+        .await
 }
 
 #[cfg(test)]
@@ -16,7 +20,8 @@ mod tests {
 
     #[tokio::test]
     // Test that the function command replies with
-    // the integer 0 regardless of the arguments.
+    // 0 when there are no replicas registered on
+    // the server.
     async fn test_command_wait_no_replicas() {
         let cmd = vec![String::from("wait"), String::from("0"), String::from("100")];
         let server = Server::new("localhost".to_string(), 6379);
@@ -34,6 +39,39 @@ mod tests {
         assert_eq!(
             connection_receiver.try_recv().unwrap(),
             ServerMessage::Data(ServerValue::Resp(Resp::Integer(0)))
+        )
+    }
+
+    #[tokio::test]
+    // Test that the function command replies with
+    // the number of replicas currently registered
+    // on the server.
+    async fn test_command_wait_counts_replicas() {
+        let cmd = vec![String::from("wait"), String::from("0"), String::from("100")];
+        let mut server = Server::new("localhost".to_string(), 6379);
+
+        // Register two fake replica channels. The
+        // receivers stay alive for the duration of
+        // the test so the senders remain valid.
+        let (replica_a_tx, _replica_a_rx) = mpsc::channel::<ServerMessage>(32);
+        let (replica_b_tx, _replica_b_rx) = mpsc::channel::<ServerMessage>(32);
+        server.replica_senders.push(replica_a_tx);
+        server.replica_senders.push(replica_b_tx);
+
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::Null,
+            sender: connection_sender,
+            binary: Vec::new(),
+            master_connection: false,
+        };
+
+        command(&server, &request, &cmd).await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::Integer(2)))
         )
     }
 }
