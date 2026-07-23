@@ -32,7 +32,11 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
         Ok(size) => {
             request
                 .data(ServerValue::Resp(Resp::Integer(size as i64)))
-                .await
+                .await;
+
+            // If any client is waiting on a BLPOP,
+            // send the first element.
+            server.notify_blocked_clients(key).await;
         }
         Err(StorageError::WrongType) => {
             request
