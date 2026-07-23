@@ -14,8 +14,8 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
         }
     };
 
-    // Check that the command received 1 argument.
-    if command.len() != 2 {
+    // Check that the command received either 1 or 2 arguments.
+    if command.len() < 2 || command.len() > 3 {
         request
             .error(ServerError::CommandSyntaxError(command.join(" ")))
             .await;
@@ -25,7 +25,27 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     // Extract the key.
     let key = &command[1];
 
-    let result = storage.lpop(key);
+    // Make sure we have a default
+    // number of elements to pop.
+    let num_items_str = &command.get(2).map_or("1", |v| v).to_string();
+
+    // Convert the number of elements
+    // from string to number.
+    let num_items: i64 = match num_items_str.parse() {
+        Ok(n) => n,
+
+        // The value is not an integer.
+        Err(_) => {
+            request
+                .data(ServerValue::Resp(Resp::simple_error(
+                    "ERR num value is not an integer or out of range",
+                )))
+                .await;
+            return;
+        }
+    };
+
+    let result = storage.lpop(key, num_items);
 
     match result {
         Ok(v) => {
@@ -37,8 +57,11 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
             if v.len() == 1 {
                 request
                     .data(ServerValue::Resp(Resp::BulkString(v[0].clone())))
-                    .await
+                    .await;
+                return;
             }
+
+            request.data(ServerValue::Resp(Resp::bulk_array(v))).await
         }
         Err(StorageError::WrongType) => {
             request
@@ -202,6 +225,41 @@ mod tests {
         assert_eq!(
             request_channel_rx.try_recv().unwrap(),
             ServerMessage::Error(ServerError::CommandSyntaxError(String::from("lpop")))
+        );
+    }
+
+    #[tokio::test]
+    // Test that the function command returns the
+    // correct error when the number of elements
+    // is not a number.
+    async fn test_command_number_elements_not_number() {
+        let storage = Storage::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let cmd = vec![
+            String::from("lpop"),
+            String::from("key"),
+            String::from("apple"),
+        ];
+
+        let (request_channel_tx, mut request_channel_rx) = mpsc::channel::<ServerMessage>(32);
+
+        let request = Request {
+            value: Resp::Null,
+            sender: request_channel_tx.clone(),
+            binary: Vec::new(),
+            client_id: 1,
+            master_connection: false,
+        };
+
+        command(&mut server, &request, &cmd).await;
+
+        assert_eq!(
+            request_channel_rx.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::simple_error(
+                "ERR num value is not an integer or out of range"
+            )))
         );
     }
 }
