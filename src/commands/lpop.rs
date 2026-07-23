@@ -28,11 +28,17 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     let result = storage.lpop(key);
 
     match result {
-        Ok(None) => request.data(ServerValue::Resp(Resp::Null)).await,
-        Ok(Some(elem)) => {
-            request
-                .data(ServerValue::Resp(Resp::BulkString(elem)))
-                .await
+        Ok(v) => {
+            if v.is_empty() {
+                request.data(ServerValue::Resp(Resp::Null)).await;
+                return;
+            }
+
+            if v.len() == 1 {
+                request
+                    .data(ServerValue::Resp(Resp::BulkString(v[0].clone())))
+                    .await
+            }
         }
         Err(StorageError::WrongType) => {
             request
