@@ -1,6 +1,6 @@
 use crate::client::Client;
 use crate::commands::{
-    discard, echo, exec, get, incr, info, multi, ping, psync, replconf, rpush, set, wait,
+    discard, echo, exec, get, incr, info, lrange, multi, ping, psync, replconf, rpush, set, wait,
 };
 use crate::connection::{
     stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
@@ -262,6 +262,9 @@ pub async fn process_request(request: Request, server: &mut Server) {
         }
         "info" => {
             info::command(server, &request, &command).await;
+        }
+        "lrange" => {
+            lrange::command(server, &request, &command).await;
         }
         "multi" => {
             multi::command(server, &request, &command).await;
