@@ -12,7 +12,7 @@ use crate::resp::{bytes_to_resp, resp_extract_length, resp_remove_type};
 use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
 use crate::Resp;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -24,6 +24,11 @@ pub struct ServerInfo {
     pub port: u16,
 }
 
+struct BlockedClient {
+    client_id: u64,
+    sender: mpsc::Sender<ServerMessage>,
+}
+
 pub struct Server {
     pub info: ServerInfo,
     pub storage: Option<Storage>,
@@ -33,6 +38,7 @@ pub struct Server {
     pub self_sender: Option<mpsc::Sender<ConnectionMessage>>,
     pub next_client_id: AtomicU64,
     pub clients: HashMap<u64, Client>,
+    blocked_clients: HashMap<String, VecDeque<BlockedClient>>,
 }
 
 impl Server {
@@ -46,6 +52,7 @@ impl Server {
             self_sender: None,
             next_client_id: AtomicU64::new(1),
             clients: HashMap::new(),
+            blocked_clients: HashMap::new(),
         }
     }
 
@@ -81,6 +88,13 @@ impl Server {
         ];
 
         v
+    }
+
+    pub fn block_client(&mut self, key: &str, client_id: u64, sender: mpsc::Sender<ServerMessage>) {
+        self.blocked_clients
+            .entry(key.to_string())
+            .or_default()
+            .push_back(BlockedClient { client_id, sender });
     }
 }
 
@@ -527,6 +541,54 @@ mod tests {
         server.set_storage(storage);
 
         assert!(server.storage.is_some());
+    }
+
+    #[test]
+    // Test that the method block_client adds the
+    // correct data to the internal structure
+    // of the server.
+    fn test_block_client_add() {
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key", 1, connection_sender);
+
+        let blocked_clients_queue = server.blocked_clients.get("key").unwrap();
+        let blocked_client = blocked_clients_queue.front().unwrap();
+
+        assert_eq!(blocked_client.client_id, 1);
+
+        blocked_client
+            .sender
+            .try_send(ServerMessage::Data(ServerValue::None))
+            .unwrap();
+        assert!(connection_receiver.try_recv().is_ok());
+    }
+
+    #[test]
+    // Test that the method block_client adds clients
+    // on the same list using a FIFO strategy.
+    fn test_block_client_fifo() {
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        let (connection_sender1, mut connection_receiver1) = mpsc::channel::<ServerMessage>(32);
+        let (connection_sender2, _) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key", 1, connection_sender1);
+        server.block_client("key", 2, connection_sender2);
+
+        let blocked_clients_queue = server.blocked_clients.get("key").unwrap();
+
+        assert_eq!(blocked_clients_queue.len(), 2);
+
+        let blocked_client = blocked_clients_queue.front().unwrap();
+
+        assert_eq!(blocked_client.client_id, 1);
+
+        blocked_client
+            .sender
+            .try_send(ServerMessage::Data(ServerValue::None))
+            .unwrap();
+        assert!(connection_receiver1.try_recv().is_ok());
     }
 
     #[tokio::test]
