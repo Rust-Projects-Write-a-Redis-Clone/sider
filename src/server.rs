@@ -98,6 +98,22 @@ impl Server {
             .push_back(BlockedClient { client_id, sender });
     }
 
+    pub async fn remove_blocked_client(&mut self, key: &str, client_id: u64) {
+        // Extract the queue associated with the given key.
+        // The default is a convenient way to deal
+        // with the case of the key not being registered.
+        let queue = self.blocked_clients.entry(key.to_string()).or_default();
+
+        if let Some(index) = queue.iter().position(|value| value.client_id == client_id) {
+            if let Some(blocked_client) = queue.remove(index) {
+                let _ = blocked_client
+                    .sender
+                    .send(ServerMessage::Data(ServerValue::Resp(Resp::NullArray)))
+                    .await;
+            }
+        }
+    }
+
     pub async fn notify_blocked_clients(&mut self, key: &str) {
         // Extract the queue associated with the given key.
         // The default is a convenient way to deal
@@ -183,6 +199,13 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
                             eprintln!("Error initialising client");
                             return;
                         };
+                    }
+
+                    // The blocked client timed out and is
+                    // signalling that it wants to be removed
+                    // from the queue.
+                    ConnectionMessage::BlockedClientTimeout {key, client_id} => {
+                        server.remove_blocked_client(&key, client_id).await;
                     }
 
                     // If the message contains a request, extract it.
@@ -771,6 +794,51 @@ mod tests {
                 "WRONGTYPE Operation against a key holding the wrong kind of value",
             )))
         );
+    }
+
+    #[tokio::test]
+    // Test that the method remove_blocked_client
+    // correctly removes a client added to a queue.
+    async fn test_remove_blocked_client() {
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        let (connection_sender1, _) = mpsc::channel::<ServerMessage>(32);
+        let (connection_sender2, _) = mpsc::channel::<ServerMessage>(32);
+        let (connection_sender3, _) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key1", 1, connection_sender1);
+        server.block_client("key1", 2, connection_sender2);
+        server.block_client("key2", 3, connection_sender3);
+
+        server.remove_blocked_client("key1", 2).await;
+
+        let queue1 = server.blocked_clients.get("key1").unwrap();
+        let queue2 = server.blocked_clients.get("key2").unwrap();
+
+        assert_eq!(queue1.len(), 1);
+        assert_eq!(queue2.len(), 1);
+
+        let blocked_client = queue1.front().unwrap();
+
+        assert_eq!(blocked_client.client_id, 1);
+    }
+
+    #[tokio::test]
+    // Test that the method remove_blocked_client
+    // works when there is no client matching
+    // the given key and client_id.
+    async fn test_remove_blocked_client_no_client() {
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        let (connection_sender1, _) = mpsc::channel::<ServerMessage>(32);
+        let (connection_sender2, _) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key1", 1, connection_sender1);
+        server.block_client("key1", 2, connection_sender2);
+
+        server.remove_blocked_client("key2", 3).await;
+
+        let queue1 = server.blocked_clients.get("key1").unwrap();
+
+        assert_eq!(queue1.len(), 2);
     }
 
     #[tokio::test]

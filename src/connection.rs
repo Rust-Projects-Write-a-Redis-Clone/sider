@@ -50,6 +50,7 @@ type ConnectionResult<T> = Result<T, ConnectionError>;
 #[derive(Debug)]
 pub enum ConnectionMessage {
     NewClient(mpsc::Sender<ServerMessage>),
+    BlockedClientTimeout { key: String, client_id: u64 },
     Request(Request),
 }
 
