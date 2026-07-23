@@ -2,6 +2,7 @@ use crate::request::Request;
 use crate::resp::Resp;
 use crate::server::Server;
 use crate::server_result::{ServerError, ServerValue};
+use crate::storage_result::StorageError;
 
 pub async fn command(server: &mut Server, request: &Request, command: &[String]) {
     // Extract the storage from the server.
@@ -31,6 +32,13 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
         Ok(size) => {
             request
                 .data(ServerValue::Resp(Resp::Integer(size as i64)))
+                .await
+        }
+        Err(StorageError::WrongType) => {
+            request
+                .data(ServerValue::Resp(Resp::simple_error(
+                    "WRONGTYPE Operation against a key holding the wrong kind of value",
+                )))
                 .await
         }
         Err(_) => request.error(ServerError::IncorrectData).await,
