@@ -2,7 +2,7 @@ use super::*;
 
 impl Storage {
     // Implement the `lpop` operation for the storage.
-    pub fn lpop(&mut self, key: &str) -> StorageResult<Option<String>> {
+    pub fn lpop(&mut self, key: &str) -> StorageResult<Vec<String>> {
         // Get a mutable reference to the value
         // of the key and act according to its
         // nature.
@@ -22,17 +22,18 @@ impl Storage {
             }) => {
                 // If the list is empty we
                 // cannot remove elements.
+                // Return an empty vector.
                 if v.is_empty() {
-                    return Ok(None);
+                    return Ok(vec![]);
                 }
 
                 // Remove and return the first element.
-                Some(v.remove(0))
+                vec![v.remove(0)]
             }
 
             // The key doesn't exist.
-            // Return none.
-            None => None,
+            // Return an empty vector.
+            None => vec![],
         };
 
         Ok(item)
@@ -51,7 +52,7 @@ mod tests {
 
         let output = storage.lpop("akey").unwrap();
 
-        assert_eq!(output, None);
+        assert_eq!(output, Vec::<String>::new());
         assert_eq!(storage.store.len(), 0);
     }
 
@@ -68,7 +69,7 @@ mod tests {
 
         let output = storage.lpop("akey").unwrap();
 
-        assert_eq!(output, Some(String::from("value0")));
+        assert_eq!(output, vec![String::from("value0")]);
         assert_eq!(storage.store.len(), 1);
         match storage.store.get("akey") {
             Some(value) => assert_eq!(value, &StorageData::list(["value1"])),
@@ -90,7 +91,7 @@ mod tests {
         let _ = storage.lpop("akey").unwrap();
         let output = storage.lpop("akey").unwrap();
 
-        assert_eq!(output, None);
+        assert_eq!(output, Vec::<String>::new());
         assert_eq!(storage.store.len(), 1);
         match storage.store.get("akey") {
             Some(value) => assert_eq!(value, &StorageData::list::<[_; 0], String>([])),
