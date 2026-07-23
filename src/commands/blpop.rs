@@ -29,14 +29,14 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     let timeout_str = &command[2];
 
     // Convert the timeout from string to number.
-    let _timeout: i64 = match timeout_str.parse() {
+    let _timeout: f64 = match timeout_str.parse() {
         Ok(n) => n,
 
-        // The value is not an integer.
+        // The value is not a valid number.
         Err(_) => {
             request
                 .data(ServerValue::Resp(Resp::simple_error(
-                    "ERR timeout is not an integer",
+                    "ERR timeout is not a number",
                 )))
                 .await;
             return;
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(
             request_channel_rx.try_recv().unwrap(),
             ServerMessage::Data(ServerValue::Resp(Resp::simple_error(
-                "ERR timeout is not an integer"
+                "ERR timeout is not a number"
             )))
         );
     }
