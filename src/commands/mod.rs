@@ -1,3 +1,4 @@
+pub mod blpop;
 pub mod discard;
 pub mod echo;
 pub mod exec;
