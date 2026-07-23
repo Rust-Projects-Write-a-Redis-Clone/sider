@@ -29,7 +29,7 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
     let timeout_str = &command[2];
 
     // Convert the timeout from string to number.
-    let _timeout: f64 = match timeout_str.parse() {
+    let timeout: f64 = match timeout_str.parse() {
         Ok(n) => n,
 
         // The value is not a valid number.
@@ -54,7 +54,7 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
             // is populated, the server will notify
             // the client.
             if v.is_empty() {
-                server.block_client(key, request.client_id, request.sender.clone());
+                server.block_client(timeout, key, request.client_id, request.sender.clone());
                 return;
             }
 
