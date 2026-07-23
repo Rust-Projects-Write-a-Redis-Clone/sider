@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime};
 
 mod expiry;
 mod get;
+mod llen;
 mod lpush;
 mod lrange;
 mod rpush;
