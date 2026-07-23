@@ -91,11 +91,44 @@ impl Server {
         v
     }
 
-    pub fn block_client(&mut self, key: &str, client_id: u64, sender: mpsc::Sender<ServerMessage>) {
+    pub fn block_client(
+        &mut self,
+        timeout: f64,
+        key: &str,
+        client_id: u64,
+        sender: mpsc::Sender<ServerMessage>,
+    ) {
         self.blocked_clients
             .entry(key.to_string())
             .or_default()
-            .push_back(BlockedClient { client_id, sender });
+            .push_back(BlockedClient {
+                client_id,
+                sender: sender.clone(),
+            });
+
+        if timeout > 0.0 {
+            // To monitor a blocked client the server
+            // needs to have a self sender. This should be
+            // initialised but as it's optional we need to check.
+            let server_sender = match &self.self_sender {
+                Some(sender) => sender.clone(),
+                None => {
+                    let _ =
+                        sender.try_send(ServerMessage::Error(ServerError::CommandInternalError(
+                            String::from("Server self sender not initialised"),
+                        )));
+                    return;
+                }
+            };
+
+            // Spawn the blocked client handler.
+            tokio::spawn(blocked_client_handler(
+                timeout,
+                key.to_string(),
+                client_id,
+                server_sender,
+            ));
+        };
     }
 
     pub async fn remove_blocked_client(&mut self, key: &str, client_id: u64) {
@@ -267,6 +300,19 @@ pub async fn wait_handler(
             }
         }
     }
+}
+
+pub async fn blocked_client_handler(
+    timeout: f64,
+    key: String,
+    client_id: u64,
+    server_sender: mpsc::Sender<ConnectionMessage>,
+) {
+    tokio::time::sleep(Duration::from_secs_f64(timeout)).await;
+
+    let _ = server_sender
+        .send(ConnectionMessage::BlockedClientTimeout { key, client_id })
+        .await;
 }
 
 // Forward the given request to all replicas known to the server.
@@ -637,7 +683,7 @@ mod tests {
         let mut server: Server = Server::new("localhost".to_string(), 6379);
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key", 1, connection_sender);
+        server.block_client(0.0, "key", 1, connection_sender);
 
         let blocked_clients_queue = server.blocked_clients.get("key").unwrap();
         let blocked_client = blocked_clients_queue.front().unwrap();
@@ -659,8 +705,8 @@ mod tests {
         let (connection_sender1, mut connection_receiver1) = mpsc::channel::<ServerMessage>(32);
         let (connection_sender2, _) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key", 1, connection_sender1);
-        server.block_client("key", 2, connection_sender2);
+        server.block_client(0.0, "key", 1, connection_sender1);
+        server.block_client(0.0, "key", 2, connection_sender2);
 
         let blocked_clients_queue = server.blocked_clients.get("key").unwrap();
 
@@ -685,7 +731,7 @@ mod tests {
         let mut server: Server = Server::new("localhost".to_string(), 6379);
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key1", 1, connection_sender);
+        server.block_client(0.0, "key1", 1, connection_sender);
         server.notify_blocked_clients("key2").await;
 
         assert!(connection_receiver.try_recv().is_err());
@@ -706,7 +752,7 @@ mod tests {
 
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key1", 1, connection_sender);
+        server.block_client(0.0, "key1", 1, connection_sender);
         server.notify_blocked_clients("key1").await;
 
         assert_eq!(
@@ -735,8 +781,8 @@ mod tests {
         let (connection_sender1, mut connection_receiver1) = mpsc::channel::<ServerMessage>(32);
         let (connection_sender2, mut connection_receiver2) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key1", 1, connection_sender1);
-        server.block_client("key1", 2, connection_sender2);
+        server.block_client(0.0, "key1", 1, connection_sender1);
+        server.block_client(0.0, "key1", 2, connection_sender2);
         server.notify_blocked_clients("key1").await;
 
         assert_eq!(
@@ -760,7 +806,7 @@ mod tests {
 
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key1", 1, connection_sender);
+        server.block_client(0.0, "key1", 1, connection_sender);
         server.notify_blocked_clients("key1").await;
 
         assert_eq!(
@@ -785,7 +831,7 @@ mod tests {
 
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key", 1, connection_sender);
+        server.block_client(0.0, "key", 1, connection_sender);
         server.notify_blocked_clients("key").await;
 
         assert_eq!(
@@ -805,9 +851,9 @@ mod tests {
         let (connection_sender2, _) = mpsc::channel::<ServerMessage>(32);
         let (connection_sender3, _) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key1", 1, connection_sender1);
-        server.block_client("key1", 2, connection_sender2);
-        server.block_client("key2", 3, connection_sender3);
+        server.block_client(0.0, "key1", 1, connection_sender1);
+        server.block_client(0.0, "key1", 2, connection_sender2);
+        server.block_client(0.0, "key2", 3, connection_sender3);
 
         server.remove_blocked_client("key1", 2).await;
 
@@ -831,8 +877,8 @@ mod tests {
         let (connection_sender1, _) = mpsc::channel::<ServerMessage>(32);
         let (connection_sender2, _) = mpsc::channel::<ServerMessage>(32);
 
-        server.block_client("key1", 1, connection_sender1);
-        server.block_client("key1", 2, connection_sender2);
+        server.block_client(0.0, "key1", 1, connection_sender1);
+        server.block_client(0.0, "key1", 2, connection_sender2);
 
         server.remove_blocked_client("key2", 3).await;
 
