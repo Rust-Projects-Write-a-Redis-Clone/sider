@@ -4,6 +4,7 @@ pub mod exec;
 pub mod get;
 pub mod incr;
 pub mod info;
+pub mod lrange;
 pub mod multi;
 pub mod ping;
 pub mod psync;
