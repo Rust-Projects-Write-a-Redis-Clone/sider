@@ -5,6 +5,7 @@ pub mod get;
 pub mod incr;
 pub mod info;
 pub mod llen;
+pub mod lpop;
 pub mod lpush;
 pub mod lrange;
 pub mod multi;

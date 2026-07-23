@@ -1,7 +1,7 @@
 use crate::client::Client;
 use crate::commands::{
-    discard, echo, exec, get, incr, info, llen, lpush, lrange, multi, ping, psync, replconf, rpush,
-    set, wait,
+    discard, echo, exec, get, incr, info, llen, lpop, lpush, lrange, multi, ping, psync, replconf,
+    rpush, set, wait,
 };
 use crate::connection::{
     stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
@@ -266,6 +266,9 @@ pub async fn process_request(request: Request, server: &mut Server) {
         }
         "llen" => {
             llen::command(server, &request, &command).await;
+        }
+        "lpop" => {
+            lpop::command(server, &request, &command).await;
         }
         "lpush" => {
             lpush::command(server, &request, &command).await;
