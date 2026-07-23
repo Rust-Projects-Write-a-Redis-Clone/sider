@@ -203,6 +203,25 @@ impl Storage {
                 // Make sure everything is i64.
                 let length = v.len() as i64;
 
+                // If start is negative add the
+                // length of the vector to make it
+                // relative to the end. Also, make
+                // sure 0 is the minimum value.
+                let start = if start < 0 {
+                    (start + length).max(0)
+                } else {
+                    start
+                };
+
+                // If stop is negative add the
+                // length of the vector to make it
+                // relative to the end.
+                // If the result is still negative
+                // keep it as it is. This will
+                // make start > stop and trigger
+                // the next check.
+                let stop = if stop < 0 { stop + length } else { stop };
+
                 // If start is past the end of
                 // the list or if start is greater
                 // than stop return an empty
@@ -664,6 +683,95 @@ mod tests {
         let expected = Vec::<String>::new();
 
         let output = storage.lrange("akey", 12, 15).unwrap();
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    // Test that the function lrange works as expected
+    // when the key exists and is a list,
+    // and both start and stop are negative,
+    // but within the boundaries.
+    fn test_lrange_start_stop_negative() {
+        let mut storage: Storage = Storage::new();
+
+        storage.store.insert(
+            String::from("akey"),
+            StorageData::list(["value0", "value1", "value2", "value3", "value4"]),
+        );
+
+        let expected = vec![
+            String::from("value1"),
+            String::from("value2"),
+            String::from("value3"),
+        ];
+
+        let output = storage.lrange("akey", -4, -2).unwrap();
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    // Test that the function lrange works as expected
+    // when the key exists and is a list,
+    // both start and stop are negative,
+    // and start is out of range.
+    fn test_lrange_start_negative_out_of_range() {
+        let mut storage: Storage = Storage::new();
+
+        storage.store.insert(
+            String::from("akey"),
+            StorageData::list(["value0", "value1", "value2", "value3", "value4"]),
+        );
+
+        let expected = vec![
+            String::from("value0"),
+            String::from("value1"),
+            String::from("value2"),
+            String::from("value3"),
+        ];
+
+        let output = storage.lrange("akey", -100, -2).unwrap();
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    // Test that the function lrange works as expected
+    // when the key exists and is a list,
+    // both start and stop are negative,
+    // and stop is out of range.
+    fn test_lrange_stop_negative_out_of_range() {
+        let mut storage: Storage = Storage::new();
+
+        storage.store.insert(
+            String::from("akey"),
+            StorageData::list(["value0", "value1", "value2", "value3", "value4"]),
+        );
+
+        let expected = Vec::<String>::new();
+
+        let output = storage.lrange("akey", -2, -100).unwrap();
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    // Test that the function lrange works as expected
+    // when the key exists and is a list,
+    // both start and stop are negative,
+    // and both are out of range.
+    fn test_lrange_start_stop_negative_out_of_range() {
+        let mut storage: Storage = Storage::new();
+
+        storage.store.insert(
+            String::from("akey"),
+            StorageData::list(["value0", "value1", "value2", "value3", "value4"]),
+        );
+
+        let expected = Vec::<String>::new();
+
+        let output = storage.lrange("akey", -200, -100).unwrap();
 
         assert_eq!(output, expected);
     }
