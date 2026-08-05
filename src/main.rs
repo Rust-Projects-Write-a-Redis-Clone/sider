@@ -1,3 +1,4 @@
+use crate::resp::Resp;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -39,11 +40,11 @@ async fn handle_connection(mut stream: TcpStream) {
             // If the stream returned some data,
             // process the request.
             Ok(size) if size != 0 => {
-                // Hardcoded response.
-                let response = "+PONG\r\n";
+                // Hardcoded response using a specific variant.
+                let response = Resp::simple_string("PONG");
 
                 // Write the response to the stream.
-                if let Err(e) = stream.write_all(response.as_bytes()).await {
+                if let Err(e) = stream.write_all(response.to_string().as_bytes()).await {
                     eprintln!("Error writing to socket: {}", e);
                 }
             }
