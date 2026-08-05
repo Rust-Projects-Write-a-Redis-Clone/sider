@@ -1,8 +1,23 @@
 use crate::resp_result::{RespError, RespResult};
+use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum Resp {
     SimpleString(String),
+}
+
+impl fmt::Display for Resp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SimpleString(data) => write!(f, "+{}\r\n", data),
+        }
+    }
+}
+
+impl Resp {
+    pub fn simple_string(s: impl Into<String>) -> Self {
+        Self::SimpleString(s.into())
+    }
 }
 
 // Extracts bytes from the buffer until a `\r\n` is reached.
@@ -286,7 +301,7 @@ mod tests {
 
         let output = parse_simple_string(buffer, &mut index).unwrap();
 
-        assert_eq!(output, Resp::SimpleString(String::from("OK")));
+        assert_eq!(output, Resp::simple_string("OK"));
         assert_eq!(index, 5);
     }
 }
