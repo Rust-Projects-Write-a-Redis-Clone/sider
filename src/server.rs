@@ -1,29 +1,16 @@
+use crate::storage::Storage;
+use crate::storage_result::{StorageError, StorageResult};
 use crate::Resp;
-use std::fmt;
-
-#[derive(Debug, PartialEq)]
-pub enum ServerError {
-    CommandError,
-}
-
-impl fmt::Display for ServerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CommandError => write!(f, "Error while processing!"),
-        }
-    }
-}
-
-pub type ServerResult<T> = Result<T, ServerError>;
+use std::sync::{Arc, Mutex};
 
 // Process an incoming request and return a result.
-pub fn process_request(request: Resp) -> ServerResult<Resp> {
+pub fn process_request(request: Resp, storage: Arc<Mutex<Storage>>) -> StorageResult<Resp> {
     // Check if the request is expressed using
     // a RESP array and extract the elements.
     let elements = match request {
         Resp::Array(v) => v,
         _ => {
-            return Err(ServerError::CommandError);
+            return Err(StorageError::IncorrectRequest);
         }
     };
 
@@ -33,23 +20,21 @@ pub fn process_request(request: Resp) -> ServerResult<Resp> {
     // Check that each element of the array is a
     // bulk string, extract the content, and add it
     // to the vector.
-    for elem in elements.iter() {
+    for elem in elements.into_iter() {
         match elem {
             Resp::BulkString(v) => command.push(v),
             _ => {
-                return Err(ServerError::CommandError);
+                return Err(StorageError::IncorrectRequest);
             }
         }
     }
 
-    // Match the first element of the vector (the name
-    // of the command) with the code that implements
-    // that command.
-    match command[0].to_lowercase().as_str() {
-        "ping" => Ok(Resp::simple_string("PONG")),
-        "echo" => Ok(Resp::bulk_string(command[1])),
-        _ => Err(ServerError::CommandError),
-    }
+    // Acquire a lock on the storage.
+    let guard = storage.lock().unwrap();
+
+    // Process the command contained in the request
+    // and return the response.
+    guard.process_command(&command)
 }
 
 #[cfg(test)]
@@ -62,8 +47,9 @@ mod tests {
     // responds with a PONG.
     fn test_process_request_ping() {
         let request = Resp::bulk_array(["PING"]);
+        let storage = Arc::new(Mutex::new(Storage::new()));
 
-        let output = process_request(request).unwrap();
+        let output = process_request(request, storage).unwrap();
 
         assert_eq!(output, Resp::simple_string("PONG"));
     }
@@ -75,10 +61,11 @@ mod tests {
     // a RESP array.
     fn test_process_request_not_array() {
         let request = Resp::bulk_string("PING");
+        let storage = Arc::new(Mutex::new(Storage::new()));
 
-        let error = process_request(request).unwrap_err();
+        let error = process_request(request, storage).unwrap_err();
 
-        assert_eq!(error, ServerError::CommandError);
+        assert_eq!(error, StorageError::IncorrectRequest);
     }
 
     #[test]
@@ -89,10 +76,11 @@ mod tests {
     // a bulk string.
     fn test_process_request_not_bulkstrings() {
         let request = Resp::Array(vec![Resp::simple_string("PING")]);
+        let storage = Arc::new(Mutex::new(Storage::new()));
 
-        let error = process_request(request).unwrap_err();
+        let error = process_request(request, storage).unwrap_err();
 
-        assert_eq!(error, ServerError::CommandError);
+        assert_eq!(error, StorageError::IncorrectRequest);
     }
 
     #[test]
@@ -101,8 +89,9 @@ mod tests {
     // responds with a copy of the input.
     fn test_process_request_echo() {
         let request = Resp::bulk_array(vec!["ECHO", "42"]);
+        let storage = Arc::new(Mutex::new(Storage::new()));
 
-        let output = process_request(request).unwrap();
+        let output = process_request(request, storage).unwrap();
 
         assert_eq!(output, Resp::bulk_string("42"));
     }
