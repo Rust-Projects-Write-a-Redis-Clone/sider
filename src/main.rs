@@ -2,6 +2,7 @@ use crate::resp::{bytes_to_resp, Resp};
 use crate::server::process_request;
 use crate::storage::Storage;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -22,17 +23,30 @@ async fn main() -> std::io::Result<()> {
     // Create a storage and protect it against concurrency issues.
     let storage = Arc::new(Mutex::new(Storage::new()));
 
+    // Create a timer that expires every 10 milliseconds.
+    let mut interval_timer = tokio::time::interval(Duration::from_millis(10));
+
     loop {
         // Process each incoming connection.
-        match listener.accept().await {
-            // The connection is valid, handle it.
-            Ok((stream, _)) => {
-                // Spawn a task to take care of this connection.
-                tokio::spawn(handle_connection(stream, storage.clone()));
+        tokio::select! {
+            // Process a new connection.
+            connection = listener.accept() => {
+                match connection {
+                    // The connection is valid, handle it.
+                    Ok((stream, _)) => {
+                        // Spawn a task to take care of this connection.
+                        tokio::spawn(handle_connection(stream, storage.clone()));
+                    }
+                    Err(e) => {
+                        println!("Error: {}", e);
+                        continue;
+                    }
+                }
             }
-            Err(e) => {
-                println!("Error: {}", e);
-                continue;
+
+            // Process the expired timer.
+            _ = interval_timer.tick() => {
+                tokio::spawn(expire_keys(storage.clone()));
             }
         }
     }
@@ -89,4 +103,13 @@ async fn handle_connection(mut stream: TcpStream, storage: Arc<Mutex<Storage>>) 
             }
         }
     }
+}
+
+// The entry point for key expiry operations.
+async fn expire_keys(storage: Arc<Mutex<Storage>>) {
+    // Acquire a lock on the storage.
+    let mut guard = storage.lock().unwrap();
+
+    // Trigger the expiry process.
+    guard.expire_keys();
 }
