@@ -19,11 +19,28 @@ impl Storage {
     }
 
     // Process an incoming command with its parameters.
-    pub fn process_command(&self, command: &[String]) -> StorageResult<Resp> {
+    pub fn process_command(&mut self, command: &[String]) -> StorageResult<Resp> {
         match command[0].to_lowercase().as_str() {
             "ping" => self.command_ping(command),
             "echo" => self.command_echo(command),
+            "get" => self.command_get(command),
+            "set" => self.command_set(command),
             _ => Err(StorageError::CommandNotAvailable(command[0].clone())),
+        }
+    }
+
+    // Implement the `set` operation for the storage.
+    fn set(&mut self, key: String, value: String) -> StorageResult<String> {
+        self.store.insert(key, StorageValue::String(value));
+
+        Ok(String::from("OK"))
+    }
+
+    // Implement the `get` operation for the storage.
+    fn get(&self, key: &str) -> StorageResult<Option<String>> {
+        match self.store.get(key) {
+            Some(StorageValue::String(v)) => Ok(Some(v.clone())),
+            None => Ok(None),
         }
     }
 
@@ -38,6 +55,44 @@ impl Storage {
     fn command_echo(&self, command: &[String]) -> StorageResult<Resp> {
         Ok(Resp::bulk_string(&command[1]))
     }
+
+    // The command `SET` stores the given key and value
+    // pair and responds with `OK`.
+    fn command_set(&mut self, command: &[String]) -> StorageResult<Resp> {
+        // Check the command length. The command
+        // requires at least 2 parameters.
+        if command.len() != 3 {
+            return Err(StorageError::CommandSyntaxError(command.join(" ")));
+        }
+
+        // Use the function set to store the key and value pair.
+        let _ = self.set(command[1].clone(), command[2].clone());
+
+        Ok(Resp::simple_string("OK"))
+    }
+
+    // The command `GET` retrieves the value of the given key
+    // and responds with a bulk string that contains it.
+    fn command_get(&self, command: &[String]) -> StorageResult<Resp> {
+        // Check the command length. The command
+        // requires at least 1 parameter.
+        if command.len() != 2 {
+            return Err(StorageError::CommandSyntaxError(command.join(" ")));
+        }
+
+        // Use the function get to retrieve the value of the given key.
+        let output = self.get(&command[1]);
+
+        match output {
+            // If the key corresponds to a value, return
+            // it as a bulk string.
+            Ok(Some(v)) => Ok(Resp::BulkString(v)),
+            // If the key is not in the storage, return
+            // a Resp null value.
+            Ok(None) => Ok(Resp::Null),
+            Err(_) => Err(StorageError::CommandInternalError(command.join(" "))),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -51,6 +106,58 @@ mod tests {
         let storage: Storage = Storage::new();
 
         assert_eq!(storage.store.len(), 0);
+    }
+
+    #[test]
+    // Test that the function set works as expected.
+    // When a key and value pair is stored the
+    // output is the value, the storage contains
+    // an element, and the value can be retrieved.
+    fn test_set_value() {
+        let mut storage: Storage = Storage::new();
+        let avalue = StorageValue::String(String::from("avalue"));
+
+        let output = storage
+            .set(String::from("akey"), String::from("avalue"))
+            .unwrap();
+
+        assert_eq!(output, "OK");
+        assert_eq!(storage.store.len(), 1);
+        match storage.store.get("akey") {
+            Some(value) => assert_eq!(value, &avalue),
+            None => panic!(),
+        }
+    }
+
+    #[test]
+    // Test that the function get works as expected.
+    // When a key value is retrieved, the output
+    // is the value, and the key is not deleted
+    // from the storage.
+    fn test_get_value() {
+        let mut storage: Storage = Storage::new();
+        storage.store.insert(
+            String::from("akey"),
+            StorageValue::String(String::from("avalue")),
+        );
+
+        let result = storage.get("akey").unwrap();
+
+        assert_eq!(storage.store.len(), 1);
+        assert_eq!(result, Some(String::from("avalue")));
+    }
+
+    #[test]
+    // Test that the function get works as expected.
+    // When a key doesn't exist the output is None, and
+    // the storage is left unchanged.
+    fn test_get_value_key_does_not_exist() {
+        let storage: Storage = Storage::new();
+
+        let result = storage.get("akey").unwrap();
+
+        assert_eq!(storage.store.len(), 0);
+        assert_eq!(result, None);
     }
 
     #[test]
@@ -89,5 +196,39 @@ mod tests {
         let output = storage.command_echo(&command).unwrap();
 
         assert_eq!(output, Resp::bulk_string("42"));
+    }
+
+    #[test]
+    // Test that the storage provides the function
+    // command_set and that its output is correct.
+    fn test_process_command_set() {
+        let mut storage: Storage = Storage::new();
+        let command = vec![
+            String::from("set"),
+            String::from("key"),
+            String::from("value"),
+        ];
+
+        let output = storage.process_command(&command).unwrap();
+
+        assert_eq!(output, Resp::simple_string("OK"));
+        assert_eq!(storage.store.len(), 1);
+    }
+
+    #[test]
+    // Test that the storage provides the function
+    // command_get and that its output is correct.
+    fn test_process_command_get() {
+        let mut storage: Storage = Storage::new();
+        storage.store.insert(
+            String::from("akey"),
+            StorageValue::String(String::from("avalue")),
+        );
+        let command = vec![String::from("get"), String::from("akey")];
+
+        let output = storage.process_command(&command).unwrap();
+
+        assert_eq!(output, Resp::bulk_string("avalue"));
+        assert_eq!(storage.store.len(), 1);
     }
 }

@@ -30,7 +30,7 @@ pub fn process_request(request: Resp, storage: Arc<Mutex<Storage>>) -> StorageRe
     }
 
     // Acquire a lock on the storage.
-    let guard = storage.lock().unwrap();
+    let mut guard = storage.lock().unwrap();
 
     // Process the command contained in the request
     // and return the response.
