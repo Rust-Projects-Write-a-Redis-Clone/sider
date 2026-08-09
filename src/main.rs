@@ -1,5 +1,7 @@
+use crate::request::Request;
 use crate::resp::{bytes_to_resp, Resp};
 use crate::server::process_request;
+use crate::server_result::ServerMessage;
 use crate::storage::Storage;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -7,6 +9,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     select,
+    sync::mpsc,
 };
 
 mod connection;
@@ -62,6 +65,9 @@ async fn handle_connection(mut stream: TcpStream, storage: Arc<Mutex<Storage>>) 
     // Create a buffer to host incoming data.
     let mut buffer = [0; 512];
 
+    // Create the MPSC channel to communicate with the connection.
+    let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+
     loop {
         select! {
             // Data is available in the stream, read it.
@@ -78,12 +84,18 @@ async fn handle_connection(mut stream: TcpStream, storage: Arc<Mutex<Storage>>) 
 
                         // Process the bytes in the buffer according to
                         // the content and extract the request. Update the index.
-                        let request = match bytes_to_resp(&buffer[..size], &mut index) {
+                        let resp = match bytes_to_resp(&buffer[..size], &mut index) {
                             Ok(v) => v,
                             Err(e) => {
                                 eprintln!("Error: {}", e);
                                 return;
                             }
+                        };
+
+                        // Create the request.
+                        let request = Request {
+                            value: resp,
+                            sender: connection_sender.clone(),
                         };
 
                         // Process the request.
