@@ -2,7 +2,7 @@ use crate::connection::{ConnectionError, ConnectionMessage};
 use crate::request::Request;
 use crate::resp::{bytes_to_resp, Resp};
 use crate::server::{run_server, Server};
-use crate::server_result::ServerMessage;
+use crate::server_result::{ServerMessage, ServerValue};
 use crate::storage::Storage;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -119,7 +119,7 @@ async fn handle_connection(mut stream: TcpStream, server_sender: mpsc::Sender<Co
             // A response arrived from the server.
             Some(response) = connection_receiver.recv() => {
                 let _ = match response {
-                    ServerMessage::Data(v) => stream.write_all(v.to_string().as_bytes()).await,
+                    ServerMessage::Data(ServerValue::Resp(v)) => stream.write_all(v.to_string().as_bytes()).await,
                     ServerMessage::Error(e) => {
                         eprintln!("Error: {}", ConnectionError::ServerError(e));
                         return;

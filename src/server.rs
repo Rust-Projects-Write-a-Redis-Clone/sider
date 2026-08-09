@@ -1,6 +1,6 @@
 use crate::connection::ConnectionMessage;
 use crate::request::Request;
-use crate::server_result::ServerMessage;
+use crate::server_result::{ServerMessage, ServerValue};
 use crate::storage::Storage;
 use crate::Resp;
 use std::time::Duration;
@@ -93,7 +93,11 @@ pub async fn process_request(request: Request, server: &mut Server) {
     // If the response is not an error send
     // the content to the client.
     if let Ok(v) = response {
-        request.sender.send(ServerMessage::Data(v)).await.unwrap();
+        request
+            .sender
+            .send(ServerMessage::Data(ServerValue::Resp(v)))
+            .await
+            .unwrap();
     }
 }
 
