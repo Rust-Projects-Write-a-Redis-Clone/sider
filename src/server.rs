@@ -1,17 +1,49 @@
+use crate::connection::ConnectionMessage;
 use crate::request::Request;
 use crate::storage::Storage;
-use crate::storage_result::{StorageError, StorageResult};
 use crate::Resp;
-use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
+
+pub struct Server {
+    pub storage: Option<Storage>,
+}
+
+impl Server {
+    pub fn new() -> Self {
+        Self { storage: None }
+    }
+
+    pub fn set_storage(&mut self, storage: Storage) {
+        self.storage = Some(storage);
+    }
+}
+
+// Listen for incoming messages and process the contained requests.
+pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMessage>) {
+    loop {
+        tokio::select! {
+            // Keep listening for messages on the incoming channel.
+            Some(message) = crx.recv() => {
+                match message {
+                    // If the message contains a request, extract it.
+                    ConnectionMessage::Request(request) => {
+                        // Process the request.
+                        process_request(request, &mut server).await;
+                    }
+                }
+            }
+        }
+    }
+}
 
 // Process an incoming request and return a result.
-pub fn process_request(request: Request, storage: Arc<Mutex<Storage>>) -> StorageResult<Resp> {
+pub async fn process_request(request: Request, server: &mut Server) {
     // Check if the request is expressed using
     // a RESP array and extract the elements.
     let elements = match request.value {
         Resp::Array(v) => v,
         _ => {
-            return Err(StorageError::IncorrectRequest);
+            panic!()
         }
     };
 
@@ -25,101 +57,42 @@ pub fn process_request(request: Request, storage: Arc<Mutex<Storage>>) -> Storag
         match elem {
             Resp::BulkString(v) => command.push(v),
             _ => {
-                return Err(StorageError::IncorrectRequest);
+                panic!()
             }
         }
     }
 
-    // Acquire a lock on the storage.
-    let mut guard = storage.lock().unwrap();
+    let storage = match server.storage.as_mut() {
+        Some(storage) => storage,
+        None => panic!(),
+    };
 
-    // Process the command contained in the request
-    // and return the response.
-    guard.process_command(&command)
+    // Process the command contained in the request.
+    let _response = storage.process_command(&command);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server_result::ServerMessage;
-    use tokio::sync::mpsc;
 
     #[test]
-    // Test that the function process_request
-    // processes a PING request and that it
-    // responds with a PONG.
-    fn test_process_request_ping() {
-        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+    // Test that the structure Server can
+    // be initialised with an empty storage.
+    fn test_create_new() {
+        let server: Server = Server::new();
 
-        let request = Request {
-            value: Resp::bulk_array(["PING"]),
-            sender: connection_sender,
-        };
-
-        let storage = Arc::new(Mutex::new(Storage::new()));
-
-        let output = process_request(request, storage).unwrap();
-
-        assert_eq!(output, Resp::simple_string("PONG"));
+        assert!(server.storage.is_none());
     }
 
     #[test]
-    // Test that the function process_request
-    // returns the correct error when it is
-    // given a request that doesn't contain
-    // a RESP array.
-    fn test_process_request_not_array() {
-        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+    // Test that an existing Storage structure
+    // can be associated with a Server.
+    fn test_set_storage() {
+        let storage = Storage::new();
 
-        let request = Request {
-            value: Resp::bulk_string("PING"),
-            sender: connection_sender,
-        };
+        let mut server: Server = Server::new();
+        server.set_storage(storage);
 
-        let storage = Arc::new(Mutex::new(Storage::new()));
-
-        let error = process_request(request, storage).unwrap_err();
-
-        assert_eq!(error, StorageError::IncorrectRequest);
-    }
-
-    #[test]
-    // Test that the function process_request
-    // returns the correct error when it is
-    // given a request that contains a RESP array
-    // but the content of the array is not
-    // a bulk string.
-    fn test_process_request_not_bulkstrings() {
-        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
-
-        let request = Request {
-            value: Resp::Array(vec![Resp::simple_string("PING")]),
-            sender: connection_sender,
-        };
-
-        let storage = Arc::new(Mutex::new(Storage::new()));
-
-        let error = process_request(request, storage).unwrap_err();
-
-        assert_eq!(error, StorageError::IncorrectRequest);
-    }
-
-    #[test]
-    // Test that the function process_request
-    // processes an ECHO request and that it
-    // responds with a copy of the input.
-    fn test_process_request_echo() {
-        let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
-
-        let request = Request {
-            value: Resp::bulk_array(["ECHO", "42"]),
-            sender: connection_sender,
-        };
-
-        let storage = Arc::new(Mutex::new(Storage::new()));
-
-        let output = process_request(request, storage).unwrap();
-
-        assert_eq!(output, Resp::bulk_string("42"));
+        assert!(server.storage.is_some());
     }
 }
