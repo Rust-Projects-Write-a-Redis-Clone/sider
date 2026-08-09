@@ -1,12 +1,12 @@
-use crate::connection::ConnectionMessage;
+use crate::connection::{ConnectionError, ConnectionMessage};
 use crate::request::Request;
 use crate::resp::{bytes_to_resp, Resp};
+use crate::server::{run_server, Server};
 use crate::server_result::ServerMessage;
 use crate::storage::Storage;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     select,
     sync::mpsc,
@@ -28,14 +28,16 @@ async fn main() -> std::io::Result<()> {
     // standard Redis port.
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
 
-    // Create a storage and protect it against concurrency issues.
-    let storage = Arc::new(Mutex::new(Storage::new()));
-
-    // Create a timer that expires every 10 milliseconds.
-    let mut interval_timer = tokio::time::interval(Duration::from_millis(10));
+    // Create and connect the storage and the server.
+    let storage = Storage::new();
+    let mut server = Server::new();
+    server.set_storage(storage);
 
     // Create the MPSC channel to communicate with the server.
-    let (server_sender, _) = mpsc::channel::<ConnectionMessage>(32);
+    let (server_sender, server_receiver) = mpsc::channel::<ConnectionMessage>(32);
+
+    // Spawn the server task.
+    tokio::spawn(run_server(server, server_receiver));
 
     loop {
         // Process each incoming connection.
@@ -54,11 +56,6 @@ async fn main() -> std::io::Result<()> {
                     }
                 }
             }
-
-            // Process the expired timer.
-            _ = interval_timer.tick() => {
-                tokio::spawn(expire_keys(storage.clone()));
-            }
         }
     }
 }
@@ -69,7 +66,7 @@ async fn handle_connection(mut stream: TcpStream, server_sender: mpsc::Sender<Co
     let mut buffer = [0; 512];
 
     // Create the MPSC channel to communicate with the connection.
-    let (connection_sender, _) = mpsc::channel::<ServerMessage>(32);
+    let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
     loop {
         select! {
@@ -118,6 +115,17 @@ async fn handle_connection(mut stream: TcpStream, server_sender: mpsc::Sender<Co
                         break;
                     }
                 }
+            }
+
+            // A response arrived from the server.
+            Some(response) = connection_receiver.recv() => {
+                let _ = match response {
+                    ServerMessage::Data(v) => stream.write_all(v.to_string().as_bytes()).await,
+                    ServerMessage::Error(e) => {
+                        eprintln!("Error: {}", ConnectionError::ServerError(e));
+                        return;
+                    }
+                };
             }
         }
     }
