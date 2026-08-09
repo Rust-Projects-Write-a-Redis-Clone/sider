@@ -1,5 +1,6 @@
 use crate::connection::ConnectionMessage;
 use crate::request::Request;
+use crate::server_result::ServerMessage;
 use crate::storage::Storage;
 use crate::Resp;
 use tokio::sync::mpsc;
@@ -68,7 +69,13 @@ pub async fn process_request(request: Request, server: &mut Server) {
     };
 
     // Process the command contained in the request.
-    let _response = storage.process_command(&command);
+    let response = storage.process_command(&command);
+
+    // If the response is not an error send
+    // the content to the client.
+    if let Ok(v) = response {
+        request.sender.send(ServerMessage::Data(v)).await.unwrap();
+    }
 }
 
 #[cfg(test)]
