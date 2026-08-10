@@ -3,6 +3,7 @@ use crate::request::Request;
 use crate::server_result::ServerMessage;
 use crate::storage::Storage;
 use crate::Resp;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 pub struct Server {
@@ -17,10 +18,24 @@ impl Server {
     pub fn set_storage(&mut self, storage: Storage) {
         self.storage = Some(storage);
     }
+
+    // The entry point for key expiry operations.
+    pub fn expire_keys(&mut self) {
+        // Get the storage contained in the server.
+        let storage = match self.storage.as_mut() {
+            Some(storage) => storage,
+            None => return,
+        };
+
+        // Trigger the expiry process.
+        storage.expire_keys();
+    }
 }
 
 // Listen for incoming messages and process the contained requests.
 pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMessage>) {
+    let mut interval_timer = tokio::time::interval(Duration::from_millis(10));
+
     loop {
         tokio::select! {
             // Keep listening for messages on the incoming channel.
@@ -32,6 +47,10 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
                         process_request(request, &mut server).await;
                     }
                 }
+            }
+
+            _ = interval_timer.tick() => {
+                server.expire_keys();
             }
         }
     }

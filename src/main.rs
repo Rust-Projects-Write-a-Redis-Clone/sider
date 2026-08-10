@@ -4,7 +4,6 @@ use crate::resp::{bytes_to_resp, Resp};
 use crate::server::{run_server, Server};
 use crate::server_result::ServerMessage;
 use crate::storage::Storage;
-use std::sync::{Arc, Mutex};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -129,13 +128,4 @@ async fn handle_connection(mut stream: TcpStream, server_sender: mpsc::Sender<Co
             }
         }
     }
-}
-
-// The entry point for key expiry operations.
-async fn expire_keys(storage: Arc<Mutex<Storage>>) {
-    // Acquire a lock on the storage.
-    let mut guard = storage.lock().unwrap();
-
-    // Trigger the expiry process.
-    guard.expire_keys();
 }
