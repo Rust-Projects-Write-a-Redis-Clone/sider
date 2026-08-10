@@ -1,8 +1,30 @@
-use crate::{resp::Resp, server_result::ServerMessage};
+use crate::{
+    resp::Resp,
+    server_result::{ServerError, ServerMessage, ServerValue},
+};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
 pub struct Request {
     pub value: Resp,
     pub sender: mpsc::Sender<ServerMessage>,
+}
+
+impl Request {
+    // The pattern `let _ = self.sender.send(...).await` here
+    // is justified by the fact that send fails only if the
+    // client dropped the connection while waiting for a
+    // command to be completed.
+    // Using unwrap() would kill the task that is handling
+    // the connection, but it feels cleaner to basically say
+    // "I sent the message, it's OK if it fails because no one
+    // is listening".
+
+    pub async fn error(&self, e: ServerError) {
+        let _ = self.sender.send(ServerMessage::Error(e)).await;
+    }
+
+    pub async fn data(&self, d: ServerValue) {
+        let _ = self.sender.send(ServerMessage::Data(d)).await;
+    }
 }
