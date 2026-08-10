@@ -1,6 +1,6 @@
 use crate::connection::ConnectionMessage;
 use crate::request::Request;
-use crate::server_result::{ServerMessage, ServerValue};
+use crate::server_result::{ServerError, ServerValue};
 use crate::storage::Storage;
 use crate::Resp;
 use std::time::Duration;
@@ -60,10 +60,11 @@ pub async fn run_server(mut server: Server, mut crx: mpsc::Receiver<ConnectionMe
 pub async fn process_request(request: Request, server: &mut Server) {
     // Check if the request is expressed using
     // a RESP array and extract the elements.
-    let elements = match request.value {
+    let elements = match &request.value {
         Resp::Array(v) => v,
         _ => {
-            panic!()
+            request.error(ServerError::IncorrectData).await;
+            return;
         }
     };
 
@@ -73,18 +74,22 @@ pub async fn process_request(request: Request, server: &mut Server) {
     // Check that each element of the array is a
     // bulk string, extract the content, and add it
     // to the vector.
-    for elem in elements.into_iter() {
+    for elem in elements.iter() {
         match elem {
-            Resp::BulkString(v) => command.push(v),
+            Resp::BulkString(v) => command.push(v.clone()),
             _ => {
-                panic!()
+                request.error(ServerError::IncorrectData).await;
+                return;
             }
         }
     }
 
     let storage = match server.storage.as_mut() {
         Some(storage) => storage,
-        None => panic!(),
+        None => {
+            request.error(ServerError::StorageNotInitialised).await;
+            return;
+        }
     };
 
     // Process the command contained in the request.
@@ -93,11 +98,7 @@ pub async fn process_request(request: Request, server: &mut Server) {
     // If the response is not an error send
     // the content to the client.
     if let Ok(v) = response {
-        request
-            .sender
-            .send(ServerMessage::Data(ServerValue::Resp(v)))
-            .await
-            .unwrap();
+        request.data(ServerValue::Resp(v)).await;
     }
 }
 
