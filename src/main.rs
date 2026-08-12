@@ -4,6 +4,8 @@ use crate::server::{run_server, Server};
 use crate::storage::Storage;
 use tokio::sync::mpsc;
 
+mod commands;
+
 mod connection;
 mod request;
 mod resp;
