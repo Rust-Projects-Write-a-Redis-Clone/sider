@@ -1,4 +1,4 @@
-use crate::connection::{run_listener, ConnectionMessage};
+use crate::connection::{run_listener, run_master_listener, ConnectionMessage};
 use crate::replication::ReplicationConfig;
 use crate::resp::Resp;
 use crate::server::{run_server, Server};
@@ -86,6 +86,15 @@ async fn main() -> std::io::Result<()> {
 
     // Create the MPSC channel to communicate with the server.
     let (server_sender, server_receiver) = mpsc::channel::<ConnectionMessage>(32);
+
+    if let Some(master_config) = &server.replication.master {
+        run_master_listener(
+            master_config.host.clone(),
+            master_config.port,
+            server_sender.clone(),
+        )
+        .await;
+    }
 
     // Spawn the server task.
     tokio::spawn(run_server(server, server_receiver));
