@@ -13,14 +13,21 @@ use tokio::{
     net::TcpStream,
 };
 
+pub struct ServerInfo {
+    pub host: String,
+    pub port: u16,
+}
+
 pub struct Server {
+    pub info: ServerInfo,
     pub storage: Option<Storage>,
     pub replication: ReplicationConfig,
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub fn new(host: String, port: u16) -> Self {
         Self {
+            info: ServerInfo { host, port },
             storage: None,
             replication: ReplicationConfig::new_master(),
         }
@@ -192,7 +199,7 @@ mod tests {
     // Test that the structure Server can
     // be initialised with an empty storage.
     fn test_create_new() {
-        let server: Server = Server::new();
+        let server: Server = Server::new("localhost".to_string(), 6379);
 
         assert!(server.storage.is_none());
     }
@@ -203,7 +210,8 @@ mod tests {
     fn test_set_storage() {
         let storage = Storage::new();
 
-        let mut server: Server = Server::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+
         server.set_storage(storage);
 
         assert!(server.storage.is_some());
@@ -223,7 +231,7 @@ mod tests {
 
         let storage = Storage::new();
 
-        let mut server: Server = Server::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
         process_request(request, &mut server).await;
@@ -248,7 +256,7 @@ mod tests {
 
         let storage = Storage::new();
 
-        let mut server: Server = Server::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
         process_request(request, &mut server).await;
@@ -274,7 +282,7 @@ mod tests {
 
         let storage = Storage::new();
 
-        let mut server: Server = Server::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
         process_request(request, &mut server).await;
@@ -301,7 +309,7 @@ mod tests {
 
         let storage = Storage::new();
 
-        let mut server: Server = Server::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
         server.set_storage(storage);
 
         process_request(request, &mut server).await;
