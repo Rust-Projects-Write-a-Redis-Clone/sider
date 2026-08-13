@@ -36,7 +36,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_command_master() {
-        let server: Server = Server::new();
+        let server: Server = Server::new("localhost".to_string(), 6379);
 
         let cmd = vec![String::from("info")];
 
@@ -63,7 +63,8 @@ mod tests {
     #[tokio::test]
     async fn test_command_replica() {
         let config = ReplicationConfig::new_replica(String::from("someserver"), 4242);
-        let mut server: Server = Server::new();
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+
         server.set_replication(config);
 
         let cmd = vec![String::from("info")];

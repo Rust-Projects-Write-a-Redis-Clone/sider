@@ -79,8 +79,9 @@ async fn main() -> std::io::Result<()> {
     let mut storage = Storage::new();
     storage.set_active_expiry(true);
 
-    // Create the server and attach the storage.
-    let mut server = Server::new();
+    // Create the server, attach the storage
+    // and configure replication.
+    let mut server = Server::new(args.host.clone(), args.port);
     server.set_storage(storage);
     server.set_replication(replication_config);
 

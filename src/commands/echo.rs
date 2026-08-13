@@ -21,7 +21,7 @@ mod tests {
     // responds with a copy of the input.
     async fn test_command() {
         let cmd = vec![String::from("echo"), String::from("hey")];
-        let server = Server::new();
+        let server = Server::new("localhost".to_string(), 6379);
         let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
 
         let request = Request {
