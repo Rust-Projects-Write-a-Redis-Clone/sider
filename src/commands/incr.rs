@@ -30,29 +30,37 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
 
     // Check the value of the key.
     let result = match output {
-        // The value exists and it's not None.
-        // Parse it into an i64.
-        Ok(Some(v)) => match v.parse::<i64>() {
-            // The value was successfully parsed.
-            Ok(n) => {
-                // Increment the value.
-                let value = n + 1;
+        // The key exists but the value might be None.
+        // If it is None, we act as if the key
+        // was correctly read and has value "0",
+        // which will then be incremented to 1,
+        // stored, and sent back to the user.
+        Ok(storage_value) => {
+            // Convert None into a "0".
+            let storage_value = storage_value.unwrap_or_else(|| String::from("0"));
 
-                // Try to store the incremented value.
-                match storage.set(key.clone(), value.to_string(), SetArgs::new()) {
-                    // Incremented value successfully stored,
-                    // send it back to the client.
-                    Ok(_) => Ok(ServerValue::Resp(Resp::Integer(value))),
-                    // An error occurred.
-                    Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
+            // Parse the storage value into an i64.
+            match storage_value.parse::<i64>() {
+                // The value was successfully parsed.
+                Ok(n) => {
+                    // Increment the value.
+                    let value = n + 1;
+
+                    // Try to store the incremented value.
+                    match storage.set(key.clone(), value.to_string(), SetArgs::new()) {
+                        // Incremented value successfully stored,
+                        // send it back to the client.
+                        Ok(_) => Ok(ServerValue::Resp(Resp::Integer(value))),
+                        // An error occurred.
+                        Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
+                    }
                 }
+                // The value is not an integer.
+                Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
             }
-            // The value is not an integer.
-            Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
-        },
-        // The value doesn't exist or
-        // another error occurred.
-        _ => Err(ServerError::CommandInternalError(command.join(" "))),
+        }
+        // An error occurred while reading the key.
+        Err(_) => Err(ServerError::CommandInternalError(command.join(" "))),
     };
 
     request.result(result).await;
@@ -156,8 +164,9 @@ mod tests {
     }
 
     #[tokio::test]
-    // Test that the function command returns the
-    // correct error when the key does not exist.
+    // Test that the function command processes
+    // an `INCR` request when the key does not exist
+    // and creates it with value 1.
     async fn test_command_key_does_not_exist() {
         let storage = Storage::new();
 
@@ -179,7 +188,7 @@ mod tests {
 
         assert_eq!(
             connection_receiver.try_recv().unwrap(),
-            ServerMessage::Error(ServerError::CommandInternalError("incr key".to_string()))
+            ServerMessage::Data(ServerValue::Resp(Resp::Integer(1)))
         );
     }
 
