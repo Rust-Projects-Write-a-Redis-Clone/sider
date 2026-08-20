@@ -1,4 +1,4 @@
-use crate::commands::{echo, get, incr, info, ping, psync, replconf, set, wait};
+use crate::commands::{echo, get, incr, info, multi, ping, psync, replconf, set, wait};
 use crate::connection::{
     stream_read_data_length, stream_read_line, stream_send_receive_resp, ConnectionMessage,
 };
@@ -197,6 +197,9 @@ pub async fn process_request(request: Request, server: &mut Server) {
         }
         "info" => {
             info::command(server, &request, &command).await;
+        }
+        "multi" => {
+            multi::command(server, &request, &command).await;
         }
         "ping" => {
             ping::command(server, &request, &command).await;
