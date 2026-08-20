@@ -2,6 +2,7 @@ pub mod echo;
 pub mod get;
 pub mod incr;
 pub mod info;
+pub mod multi;
 pub mod ping;
 pub mod psync;
 pub mod replconf;
