@@ -1,6 +1,8 @@
 use crate::resp::Resp;
+use crate::set::{parse_set_arguments, KeyExpiry, SetArgs};
 use crate::storage_result::{StorageError, StorageResult};
 use std::collections::HashMap;
+use std::ops::Add;
 use std::time::{Duration, SystemTime};
 
 #[derive(Debug, PartialEq)]
@@ -99,14 +101,35 @@ impl Storage {
     }
 
     // Implement the `set` operation for the storage.
-    fn set(&mut self, key: String, value: String) -> StorageResult<String> {
-        self.store.insert(key, StorageData::from(value));
+    fn set(&mut self, key: String, value: String, args: SetArgs) -> StorageResult<String> {
+        let mut data = StorageData::from(value);
+
+        if let Some(value) = args.expiry {
+            let expiry = match value {
+                KeyExpiry::EX(v) => Duration::from_secs(v),
+                KeyExpiry::PX(v) => Duration::from_millis(v),
+            };
+
+            data.add_expiry(expiry);
+            self.expiry
+                .insert(key.clone(), data.creation_time.add(expiry));
+        }
+
+        self.store.insert(key, data);
 
         Ok(String::from("OK"))
     }
 
     // Implement the `get` operation for the storage.
-    fn get(&self, key: &str) -> StorageResult<Option<String>> {
+    fn get(&mut self, key: &str) -> StorageResult<Option<String>> {
+        if let Some(&expiry) = self.expiry.get(key) {
+            if SystemTime::now() >= expiry {
+                self.expiry.remove(key);
+                self.store.remove(key);
+                return Ok(None);
+            }
+        }
+
         match self.store.get(key) {
             Some(StorageData {
                 value: StorageValue::String(v),
@@ -134,19 +157,23 @@ impl Storage {
     fn command_set(&mut self, command: &[String]) -> StorageResult<Resp> {
         // Check the command length. The command
         // requires at least 2 parameters.
-        if command.len() != 3 {
+        if command.len() < 3 {
             return Err(StorageError::CommandSyntaxError(command.join(" ")));
         }
 
         // Use the function set to store the key and value pair.
-        let _ = self.set(command[1].clone(), command[2].clone());
+        let key = command[1].clone();
+        let value = command[2].clone();
+        let args = parse_set_arguments(&command[3..])?;
+
+        let _ = self.set(key, value, args);
 
         Ok(Resp::simple_string("OK"))
     }
 
     // The command `GET` retrieves the value of the given key
     // and responds with a bulk string that contains it.
-    fn command_get(&self, command: &[String]) -> StorageResult<Resp> {
+    fn command_get(&mut self, command: &[String]) -> StorageResult<Resp> {
         // Check the command length. The command
         // requires at least 1 parameter.
         if command.len() != 2 {
@@ -194,7 +221,7 @@ mod tests {
         let avalue = StorageData::from(String::from("avalue"));
 
         let output = storage
-            .set(String::from("akey"), String::from("avalue"))
+            .set(String::from("akey"), String::from("avalue"), SetArgs::new())
             .unwrap();
 
         assert_eq!(output, "OK");
@@ -203,6 +230,39 @@ mod tests {
             Some(value) => assert_eq!(value, &avalue),
             None => panic!(),
         }
+    }
+
+    #[test]
+    // Test that the function set works as expected
+    // when a key is created with passive expiration.
+    // This doesn't test the expiry mechanism itself,
+    // only that the key is created with the correct
+    // parameters.
+    fn test_set_value_with_px() {
+        let mut storage: Storage = Storage::new();
+        let mut avalue = StorageData::from(String::from("avalue"));
+        avalue.add_expiry(Duration::from_millis(100));
+
+        let output = storage
+            .set(
+                String::from("akey"),
+                String::from("avalue"),
+                SetArgs {
+                    expiry: Some(KeyExpiry::PX(100)),
+                    existence: None,
+                    get: false,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(output, "OK");
+        assert_eq!(storage.store.len(), 1);
+        match storage.store.get("akey") {
+            Some(value) => assert_eq!(value, &avalue),
+            None => panic!(),
+        }
+
+        storage.expiry.get("akey").unwrap();
     }
 
     #[test]
@@ -228,7 +288,7 @@ mod tests {
     // When a key doesn't exist the output is None, and
     // the storage is left unchanged.
     fn test_get_value_key_does_not_exist() {
-        let storage: Storage = Storage::new();
+        let mut storage: Storage = Storage::new();
 
         let result = storage.get("akey").unwrap();
 
@@ -315,7 +375,7 @@ mod tests {
         let mut storage: Storage = Storage::new();
 
         storage
-            .set(String::from("akey"), String::from("avalue"))
+            .set(String::from("akey"), String::from("avalue"), SetArgs::new())
             .unwrap();
 
         storage.expiry.insert(
@@ -336,7 +396,7 @@ mod tests {
         storage.set_active_expiry(false);
 
         storage
-            .set(String::from("akey"), String::from("avalue"))
+            .set(String::from("akey"), String::from("avalue"), SetArgs::new())
             .unwrap();
 
         storage.expiry.insert(
