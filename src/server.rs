@@ -11,6 +11,7 @@ use crate::request::Request;
 use crate::resp::{bytes_to_resp, resp_extract_length, resp_remove_type};
 use crate::server_result::{ServerError, ServerMessage, ServerResult, ServerValue};
 use crate::storage::Storage;
+use crate::storage_result::StorageError;
 use crate::Resp;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -95,6 +96,63 @@ impl Server {
             .entry(key.to_string())
             .or_default()
             .push_back(BlockedClient { client_id, sender });
+    }
+
+    pub async fn notify_blocked_clients(&mut self, key: &str) {
+        // Extract the queue associated with the given key.
+        // The default is a convenient way to deal
+        // with the case of the key not being registered.
+        let queue = self.blocked_clients.entry(key.to_string()).or_default();
+
+        // Extract the first client that entered the queue.
+        let first_client = queue.pop_front();
+
+        // If the client is present we need to
+        // pop the first element of the associated
+        // list and send it to the client.
+        if let Some(client) = first_client {
+            // Make sure the server has an initialised
+            // storage. If not, we send an error to
+            // the client.
+            let Some(storage) = self.storage.as_mut() else {
+                let _ = client
+                    .sender
+                    .send(ServerMessage::Error(ServerError::StorageNotInitialised))
+                    .await;
+                return;
+            };
+
+            // Pop the element from the list.
+            let value = storage.lpop(key, 1);
+
+            let message = match value {
+                // The list is empty. A concurrent LPOP might
+                // have removed the element. Add the client back
+                // to the queue.
+                Ok(v) if v.is_empty() => {
+                    queue.push_front(client);
+                    return;
+                }
+
+                // The list returned an element. Send it to
+                // the client.
+                Ok(v) => ServerMessage::Data(ServerValue::Resp(Resp::bulk_array([key, &v[0]]))),
+
+                // The key is not a list.
+                Err(StorageError::WrongType) => {
+                    ServerMessage::Data(ServerValue::Resp(Resp::simple_error(
+                        "WRONGTYPE Operation against a key holding the wrong kind of value",
+                    )))
+                }
+
+                // Another error occurred while retrieving the key.
+                Err(_) => ServerMessage::Error(ServerError::CommandInternalError(String::from(
+                    "Error while retrieving the value of the key",
+                ))),
+            };
+
+            let _ = client.sender.send(message).await;
+        }
     }
 }
 
@@ -520,6 +578,8 @@ pub async fn exec_handler(
 mod tests {
     use super::*;
     use crate::server_result::{ServerMessage, ServerValue};
+    use crate::set::SetArgs;
+    use crate::storage_result::StorageResult;
 
     #[test]
     // Test that the structure Server can
@@ -589,6 +649,125 @@ mod tests {
             .try_send(ServerMessage::Data(ServerValue::None))
             .unwrap();
         assert!(connection_receiver1.try_recv().is_ok());
+    }
+
+    #[tokio::test]
+    // Test that the method notify_blocked_clients
+    // behaves correctly when no clients are blocked
+    // on the given key.
+    async fn test_notify_blocked_clients_no_clients() {
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key1", 1, connection_sender);
+        server.notify_blocked_clients("key2").await;
+
+        assert!(connection_receiver.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    // Test that the method notify_blocked_clients
+    // behaves correctly when a single client is blocked
+    // on the given key.
+    // The method should run lpop on the given list
+    // and notify the client.
+    async fn test_notify_blocked_clients_one_client() {
+        let mut storage = Storage::new();
+        let _ = storage.lpush("key1", &[String::from("apple")]);
+
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key1", 1, connection_sender);
+        server.notify_blocked_clients("key1").await;
+
+        assert_eq!(
+            server.storage.unwrap().lpop("key1", 1),
+            StorageResult::Ok(vec![])
+        );
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::bulk_array(["key1", "apple"])))
+        );
+    }
+
+    #[tokio::test]
+    // Test that the method notify_blocked_clients
+    // behaves correctly when two clients are blocked
+    // on the given key.
+    // The method should run lpop on the given list
+    // and notify the first client that entered the queue.
+    async fn test_notify_blocked_clients_multiple_clients() {
+        let mut storage = Storage::new();
+        let _ = storage.lpush("key1", &[String::from("apple")]);
+
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let (connection_sender1, mut connection_receiver1) = mpsc::channel::<ServerMessage>(32);
+        let (connection_sender2, mut connection_receiver2) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key1", 1, connection_sender1);
+        server.block_client("key1", 2, connection_sender2);
+        server.notify_blocked_clients("key1").await;
+
+        assert_eq!(
+            server.storage.unwrap().lpop("key1", 1),
+            StorageResult::Ok(vec![])
+        );
+        assert_eq!(
+            connection_receiver1.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::bulk_array(["key1", "apple"])))
+        );
+        assert!(connection_receiver2.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    // Test that the method notify_blocked_clients
+    // sends the correct error message when a client
+    // must be notified but the storage has not
+    // been initialised.
+    async fn test_notify_blocked_clients_no_storage() {
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key1", 1, connection_sender);
+        server.notify_blocked_clients("key1").await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Error(ServerError::StorageNotInitialised)
+        );
+    }
+
+    #[tokio::test]
+    // Test that the method notify_blocked_clients
+    // sends the correct error message when a client
+    // must be notified but the storage key doesn't
+    // contain a list.
+    async fn test_notify_blocked_clients_key_is_not_list() {
+        let mut storage = Storage::new();
+        storage
+            .set("key".to_string(), "value".to_string(), SetArgs::new())
+            .unwrap();
+
+        let mut server: Server = Server::new("localhost".to_string(), 6379);
+        server.set_storage(storage);
+
+        let (connection_sender, mut connection_receiver) = mpsc::channel::<ServerMessage>(32);
+
+        server.block_client("key", 1, connection_sender);
+        server.notify_blocked_clients("key").await;
+
+        assert_eq!(
+            connection_receiver.try_recv().unwrap(),
+            ServerMessage::Data(ServerValue::Resp(Resp::simple_error(
+                "WRONGTYPE Operation against a key holding the wrong kind of value",
+            )))
+        );
     }
 
     #[tokio::test]
