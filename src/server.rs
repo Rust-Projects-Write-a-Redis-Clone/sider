@@ -189,9 +189,7 @@ impl Server {
 
                 // The key is not a list.
                 Err(StorageError::WrongType) => {
-                    ServerMessage::Data(ServerValue::Resp(Resp::simple_error(
-                        "WRONGTYPE Operation against a key holding the wrong kind of value",
-                    )))
+                    ServerMessage::Data(ServerValue::Resp(Resp::wrong_type_error()))
                 }
 
                 // Another error occurred while retrieving the key.
@@ -836,9 +834,7 @@ mod tests {
 
         assert_eq!(
             connection_receiver.try_recv().unwrap(),
-            ServerMessage::Data(ServerValue::Resp(Resp::simple_error(
-                "WRONGTYPE Operation against a key holding the wrong kind of value",
-            )))
+            ServerMessage::Data(ServerValue::Resp(Resp::wrong_type_error()))
         );
     }
 

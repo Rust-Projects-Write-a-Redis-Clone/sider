@@ -54,6 +54,12 @@ impl Resp {
     {
         Self::Array(items.into_iter().map(Self::bulk_string).collect())
     }
+
+    pub fn wrong_type_error() -> Self {
+        Self::SimpleError(String::from(
+            "WRONGTYPE Operation against a key holding the wrong kind of value",
+        ))
+    }
 }
 
 // A function that parses a slice of bytes at the given index into a Resp value.
