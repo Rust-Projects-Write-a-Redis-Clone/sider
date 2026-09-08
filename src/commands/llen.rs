@@ -35,9 +35,7 @@ pub async fn command(server: &mut Server, request: &Request, command: &[String])
         }
         Err(StorageError::WrongType) => {
             request
-                .data(ServerValue::Resp(Resp::simple_error(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value",
-                )))
+                .data(ServerValue::Resp(Resp::wrong_type_error()))
                 .await
         }
         Err(_) => request.error(ServerError::IncorrectData).await,
